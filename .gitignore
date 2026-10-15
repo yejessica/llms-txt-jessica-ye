@@ -4,4 +4,10 @@ __pycache__/
 *.py[cod]
 .DS_Store
 backend/output/
+backend/data/
+.env
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.worker.lock
 TESTING.md
