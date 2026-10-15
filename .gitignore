@@ -11,3 +11,11 @@ backend/data/
 *.sqlite3-shm
 *.worker.lock
 TESTING.md
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/.env.*.local
+frontend/*.tsbuildinfo
+frontend/test-results/
+frontend/playwright-report/

@@ -1,16 +1,323 @@
-# Automated llms.txt Generator — Phase 2
+# Automated llms.txt Generator
 
-Deterministic Python crawler and CLI, now with a FastAPI backend, SQLite
-persistence, a separate serial worker, and automatic scheduled recrawls. No LLM
-key, Docker, Redis, external database, or frontend is required.
+Generate a structured llms.txt from a public website. A Next.js frontend connects
+to the deterministic Python crawler through FastAPI, with SQLite persistence,
+a separate serial worker, and automatic scheduled recrawls. No LLM key, Docker,
+Redis, or external database is required. The standalone CLI remains available.
 
-**Status:** 89 pytest tests and 10 subtests pass, including all 48 Phase 1 tests.
+**Status:** Phases 1–3 are complete. Frontend lint, type checking, production
+build, 26 mocked browser tests, and one live browser integration test pass.
+89 backend pytest tests and 10 subtests pass, including all 48 Phase 1 tests.
 A real `example.com` end-to-end run passed on October 15, 2026: initial generation,
 download, manual refresh, automatic recrawl, unchanged-output deduplication, and
 persistence across an API restart. Phase 1 selection-quality limitations remain;
-the five-site report is in the local `TESTING.md` if available.
+the five-site report is in the local `TESTING.md` if available. Nothing has been deployed.
 
-## Run the backend locally
+This is the project's cumulative README. Changes and setup instructions are
+grouped by phase below, newest first, with earlier phases preserved.
+
+| Phase | Changes introduced | Status |
+| --- | --- | --- |
+| [Phase 1 — Crawler and CLI](#phase-1--crawler-and-cli) | Safe crawling, extraction, ranking, Markdown generation/validation, and a standalone CLI | Complete |
+| [Phase 2 — Backend](#phase-2--backend-api-persistence-and-automatic-refresh) | FastAPI routes, SQLite persistence, background jobs, manual refresh, and scheduled recrawls | Complete |
+| [Phase 3 — Frontend](#phase-3--frontend) | Next.js interface, API proxy, job polling/recovery, preview, copy/download, regeneration, and browser tests | Complete |
+
+**Tutorials:** [Run locally](#run-locally) · [Deploy to a VPS](#deployment-guide--single-ubuntu-vps)
+
+## Run locally
+
+Use **three terminals**, all starting in the repository root. Prerequisites:
+Python 3.11+, Node.js 24 LTS (recommended), npm, and Git. No API keys or external
+database are needed. The commands below use macOS/Linux shell syntax.
+
+**Terminal 1 — install and start FastAPI:**
+
+```sh
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+test -f .env || cp .env.example .env
+set -a
+source .env
+set +a
+uvicorn app.api.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+For subsequent runs, skip creating the virtual environment and installing
+dependencies unless they have changed. Preserve any existing customized `.env`.
+
+**Terminal 2 — start the worker and automatic recrawl scheduler:**
+
+```sh
+cd backend
+source .venv/bin/activate
+set -a
+source .env
+set +a
+python -m app.worker
+```
+
+API and worker must load the **same** `backend/.env` and database path. Keep this
+terminal running: without the worker, submissions remain queued. Only one worker
+may use a database at a time; no separate scheduler process is needed.
+
+**Terminal 3 — install and start Next.js:**
+
+```sh
+cd frontend
+# If you use nvm: nvm install && nvm use
+npm ci
+test -f .env.local || cp .env.example .env.local
+npm run dev -- --hostname 127.0.0.1
+```
+
+The frontend environment should contain `BACKEND_URL=http://127.0.0.1:8000`
+(without `/api`). Next.js loads `.env.local` automatically. For later runs,
+`npm run dev -- --hostname 127.0.0.1` is sufficient if dependencies are unchanged.
+
+| Open | Address |
+| --- | --- |
+| Application | <http://localhost:3000> |
+| FastAPI interactive documentation | <http://127.0.0.1:8000/docs> |
+| API/database health | <http://127.0.0.1:8000/api/health> |
+| Same health endpoint through the frontend proxy | <http://localhost:3000/api/health> |
+
+Enter `https://example.com` in the app, generate, wait for completion, then try
+copy, download, and regenerate. Larger sites may take a few minutes. Stop each
+terminal with **Ctrl+C**. SQLite data remains in `backend/data/` with the example
+configuration. Logs appear in the API/worker terminals; queued work resumes when
+the worker starts again. For a production-mode local check, replace the third
+terminal's dev command with `npm run build` followed by `npm start`.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    Browser["Browser"]
+
+    subgraph Phase3["Phase 3 · Frontend"]
+        UI["Next.js App Router / React UI<br/>URL form · status · Markdown preview"]
+        Client["Typed API client · native fetch<br/>2-second job polling · copy/download/refresh"]
+        Proxy["Next.js /api/* proxy<br/>Server-only BACKEND_URL · no caching"]
+        UI --> Client
+        Client -->|"Same-origin requests"| Proxy
+    end
+
+    subgraph Phase2["Phase 2 · Backend and background processing"]
+        API["FastAPI<br/>Submit · job status · website metadata<br/>llms.txt · download · refresh"]
+        DB[("SQLite<br/>websites · jobs · generations · pages")]
+        Worker["Separate serial worker<br/>Claim jobs · enforce deadline · store results"]
+        Scheduler["Scheduler inside worker<br/>Queue due websites for recrawl"]
+        API <-->|"Queue/read jobs and retrieve output"| DB
+        Worker <-->|"Claim jobs · complete/fail · save output"| DB
+        Worker --> Scheduler
+        Scheduler -->|"Enqueue scheduled jobs"| DB
+    end
+
+    subgraph Phase1["Phase 1 · Shared crawler and generator"]
+        Pipeline["Safe HTTP crawling + sitemap discovery<br/>Extract → rank/select → render → validate"]
+        CLI["Standalone Python CLI"]
+        File["Local llms.txt + stats JSON"]
+        CLI --> Pipeline
+        CLI -->|"Write returned output"| File
+    end
+
+    PublicWeb["Public website<br/>robots.txt · sitemaps · HTML pages"]
+    Browser -->|"Open application"| UI
+    Proxy <-->|"HTTP /api/*"| API
+    Worker <-->|"Run pipeline / receive Markdown and metadata"| Pipeline
+    Pipeline <-->|"Bounded, robots-aware HTTP(S) requests"| PublicWeb
+```
+
+FastAPI queues work and serves persisted results; the separate worker performs
+crawls. SQLite holds both the job queue and generation history. The scheduler
+runs inside the worker, so there is no Redis queue or additional scheduler
+service. Both CLI and worker reuse the same crawl/generation pipeline. The
+browser accesses FastAPI through Next.js, which avoids cross-origin requests.
+Downloading a file does not publish it to the submitted website.
+
+## Phase 3 — Frontend
+
+### Run the frontend locally
+
+Run the backend API and worker in two terminals using the commands in the next
+section. Then, in a third terminal from the repository root:
+
+```sh
+cd frontend
+# Recommended: Node.js 24 LTS; `nvm install && nvm use` uses .nvmrc if you use nvm.
+npm ci
+cp .env.example .env.local  # first run only; preserve any existing custom settings
+npm run dev
+```
+
+Open <http://localhost:3000>. FastAPI runs at <http://localhost:8000>. Next.js
+automatically loads its environment files; the Python API and worker require
+explicit environment loading as documented below. Both Python processes must
+use the same SQLite path, and the worker must remain running.
+
+`frontend/.env.development` provides a local-only default. Override it with
+`frontend/.env.local` or the environment:
+
+```dotenv
+BACKEND_URL=http://127.0.0.1:8000
+```
+
+Set this to the **FastAPI origin**, without `/api`. It is a server-only runtime
+variable; the browser always uses relative `/api/...` requests. Production has
+no hardcoded backend default and requires `BACKEND_URL`. Restart Next.js after
+changing an environment file. The supported toolchain needs Node 20.19+ on the
+20.x line, or Node 22.13+; Node 24 LTS is recommended for a new installation.
+
+To check and run a local production build (this does not deploy anything):
+
+```sh
+cd frontend
+npm run lint
+npm run typecheck
+npm run build
+npm start
+```
+
+`npm run build` uses Next.js's supported webpack compiler. Turbopack remains the
+development default; its production CSS compiler was blocked by the development
+environment's process/port restrictions. No external fonts or network fetches
+are needed during a build.
+
+### Frontend architecture and integration
+
+```text
+frontend/
+├── app/
+│   ├── layout.tsx                 # Metadata and global styles
+│   ├── page.tsx                   # Initial, generating, and results views
+│   ├── globals.css                # Tailwind v4 and responsive component styles
+│   ├── icon.svg                   # Local favicon
+│   └── api/[...path]/route.ts      # Same-origin, allowlisted FastAPI proxy
+├── components/
+│   ├── url-form.tsx               # Validation and submission
+│   ├── generation-status.tsx      # Actual queued/running states
+│   └── llms-preview.tsx           # Raw Markdown, metadata, copy, download, refresh
+├── lib/
+│   ├── api.ts                     # Native fetch, deadlines, and safe errors
+│   ├── types.ts                   # Backend response interfaces
+│   └── use-generation.ts          # Job lifecycle, polling, retry, and recovery
+├── tests/                         # Mocked browser tests and opt-in live integration
+├── playwright.config.ts
+├── playwright.live.config.ts
+├── .env.example
+├── .env.development
+├── .nvmrc
+├── next.config.ts
+├── package.json
+└── package-lock.json
+```
+
+The frontend uses App Router, TypeScript, Tailwind CSS, and Lucide icons, without
+a component library. The proxy keeps browser requests on one origin, so **no
+backend or CORS changes were necessary**. It reads `BACKEND_URL` at request time,
+forwards the backend status/content/download headers, disables caching, and
+applies a 20-second deadline to individual HTTP requests. It never runs a crawl.
+
+1. `POST /api/generate` sends `{ "url": "https://example.com" }` and reads
+   `job_id`, `website_id`, and `status` from the 202 response.
+2. `GET /api/jobs/{job_id}` is polled every two seconds, sequentially, until
+   `completed` or `failed`. Polling stops on unmount and transient failures retry
+   twice before offering **Check job again** for the same job.
+3. After completion, `GET /api/websites/{website_id}` and
+   `GET /api/websites/{website_id}/llms.txt` supply the website metadata and plain
+   text. Counts come from the completed job; the timestamp comes from
+   `latest_generation.generated_at`. An unchanged recrawl preserves the actual
+   stored file's timestamp and shows an up-to-date message.
+4. Copy writes the preview's exact text to the clipboard. If access is denied,
+   the text is selected for manual copying. Download fetches
+   `GET /api/websites/{website_id}/download` and saves a UTF-8 `llms.txt`.
+5. `POST /api/websites/{website_id}/refresh` starts or reuses a job. The old
+   preview remains available during refresh and if refresh fails; successful
+   completion replaces the content and metadata.
+
+The UI validates HTTP(S), credentials, custom ports, and URL length before
+submission. Public DNS and SSRF checks remain authoritative on the backend.
+Buttons and an immediate submission lock prevent repeated requests. Only the
+active job reference and submitted URL are stored in tab-scoped `sessionStorage`,
+so an in-flight job can resume after reload. API errors are translated to safe,
+understandable messages; arbitrary server error bodies are never displayed.
+Empty outputs are rejected, and partial-crawl warnings remain reviewable.
+
+The backend does **not** provide incremental page counts or crawl-stage events.
+The frontend shows honest queued/running indicators, without percentages or
+invented counts. A completed job's page counts are the backend's extracted HTML
+and selected-page totals. Previewed Markdown is rendered as text, not HTML.
+
+### Frontend tests
+
+Verification recorded on October 15, 2026:
+
+| Check | Result |
+| --- | --- |
+| `npm run lint` | Pass; zero warnings |
+| `npm run typecheck` | Pass |
+| `npm run build` | Pass; Next.js 16.4.2, production webpack build |
+| `npm test` | 26 passed in 26.9 seconds; 13 scenarios on desktop and mobile |
+| `npm run test:live` | 1 passed in 11.8 seconds; real example.com crawl and refresh |
+| Backend `.venv/bin/python -m pytest -q` | 89 passed, 10 subtests passed; existing Starlette deprecation warning |
+
+Browser tests use headless **Google Chrome**, which must be installed. They run
+with Playwright for UI testing only; the crawler does not use browser automation.
+
+```sh
+cd frontend
+npm test            # Starts dev server on 127.0.0.1:3100; mocked API responses
+npm run build
+npm run test:live   # Real production server + API + worker + public example.com
+```
+
+The mocked suite runs on desktop (1440px) and mobile (390px) Chromium viewports.
+It covers rendering, validation, pending/running/completed states, duplicate
+submission protection, exact clipboard/download content, changed and unchanged
+regeneration, failed crawls, empty files, service/network errors, timeout error
+responses, failed refreshes/downloads, clipboard denial, warnings, connection
+recovery, and active-job reload recovery. It checks horizontal overflow and
+saves desktop/mobile screenshots. These are **mocked frontend tests**, not public
+crawl tests or native iOS/Safari tests.
+
+The opt-in live suite requires the existing `backend/.venv`, backend dependencies,
+public internet, and local ports 3101/8100. It starts a **production** Next.js
+server and real Uvicorn/worker processes against a temporary SQLite database,
+crawls `example.com` with one-page/depth-zero limits, and verifies submission,
+completion, preview, actual clipboard/download bytes, manual refresh, unchanged
+output, and rejection of a private IP. It cleans up its processes/database and
+does not touch the development database. It does not mock backend responses.
+
+Screenshots are generated locally under the gitignored paths:
+
+- `frontend/test-results/mock/home-desktop.png`
+- `frontend/test-results/mock/home-mobile.png`
+- `frontend/test-results/mock/result-desktop.png`
+- `frontend/test-results/mock/result-mobile.png`
+- `frontend/test-results/live/example-com-result.png`
+
+### Frontend limitations and work before deployment
+
+- Tested in desktop Chrome and mobile Chromium emulation; native Safari/Firefox
+  and physical devices have not been verified. Clipboard API access requires
+  localhost or HTTPS, with a manual-copy fallback.
+- Completed previews are not a saved frontend history. Reload recovery covers
+  in-flight jobs in the same tab; all generated files remain in backend SQLite.
+- Queue status cannot prove worker liveness. Without the separate worker, jobs
+  stay queued. The UI explains this; no new backend health endpoint was added.
+- Crawling remains bounded, serial, and subject to robots rules. JavaScript-only
+  websites and partial crawls have the existing backend limitations below.
+- Before a VPS deployment: configure the runtime `BACKEND_URL`, HTTPS/reverse
+  proxy, service supervision for Next.js/API/worker, a persistent shared SQLite
+  path and backups, and appropriate public access/rate limits. Keep FastAPI
+  reachable privately from Next.js. No authentication, deployment, database
+  changes, or crawler/worker rewrites were added in Phase 3.
+
+## Phase 2 — Backend API, persistence, and automatic refresh
+
+### Run the backend locally
 
 Python 3.11+ on macOS or Ubuntu. From the repository root:
 
@@ -181,7 +488,7 @@ Logs, JSON results, and the generated file are saved under gitignored
 `backend/output/phase2-*`. Changes to a real website were not simulated; changed
 output is covered by deterministic offline tests.
 
-Operational limits to revisit before Phase 3:
+Backend operational limits:
 
 - One local worker and SQLite file on macOS/Linux; no Windows or shared/network
   filesystem support. Scheduling waits for an active crawl to finish, and queued
@@ -193,11 +500,13 @@ Operational limits to revisit before Phase 3:
   failures may produce a smaller new file; clients should inspect job warnings.
 - No retention/pagination, schema migration framework, or dependency lockfile yet.
   These are follow-ups if history or the schema grows.
-- No authentication or per-client abuse controls in this phase. Decide access,
-  quotas, and frontend origin configuration before exposing a public service.
-  No deployment or Phase 3 implementation has been performed.
+- No authentication or per-client abuse controls. Decide access and quotas before
+  exposing a public service. The Phase 3 proxy handles browser origin integration;
+  no deployment has been performed.
 
-## Standalone CLI
+## Phase 1 — Crawler and CLI
+
+### Standalone CLI
 
 Python 3.11+ on macOS or Ubuntu:
 
@@ -236,7 +545,7 @@ returns 0, with `status: "partial"` and a warning; complete crawls report
 `status: "complete"`. Neither status proves selection quality. Failed page requests do not abort a crawl;
 no accessible HTML pages is an error. Verbose mode logs individual page progress.
 
-## Tests
+### Tests
 
 ```sh
 cd backend
@@ -255,7 +564,7 @@ real CLI on five websites with 30-page limits, retaining logs and JSON outcomes.
 A successful live runner process only means attempts were recorded; inspect each
 row's exit code and manually review generated Markdown before assigning Pass.
 
-## How it works
+### How it works
 
 1. **Safe fetching:** normalize HTTP(S) URLs, reject credentials and nonstandard
    ports, resolve every new connection, and reject any DNS answer set containing
@@ -303,7 +612,7 @@ rendering, and validation are independent Python functions, shared through
 `app/generation.py`. The CLI writes local artifacts; the worker stores outputs
 in SQLite.
 
-## Engineering trade-offs and limits
+### Engineering trade-offs and limits
 
 - Serial requests keep politeness, ordering, and failure handling simple. A large
   site can take minutes; CLI timeouts apply to individual network operations.
@@ -328,7 +637,8 @@ in SQLite.
   alternate documentation versions, and Paul Graham includes both root and
   index.html. Dependency ranges are constrained but not a reproducible lockfile.
 
-Phase 2 is implemented above. Development stops here pending Phase 3 approval.
+Phases 1–3 are implemented. Development stops after the frontend; VPS deployment
+is a separate phase.
 
 On HTTP 429 the fetcher reads Retry-After (seconds or HTTP date), waits and retries
 once when the requested wait is at most 30 seconds (five seconds without a valid
@@ -338,3 +648,500 @@ Already extracted pages can still generate a partial file. No 429 is cached.
 If sitemap discovery or robots.txt is rate-limited before page extraction, the
 CLI fails rather than continuing against the throttled site. Wait until the
 site's requested cooldown expires before starting another run.
+
+## Deployment guide — Single Ubuntu VPS
+
+**Status: tutorial only; deployment has not been executed.** This is a planned
+follow-up to Phases 1–3. Run these commands on your VPS, not on your development
+computer. The example uses Ubuntu 24.04 LTS, systemd, Nginx, and one domain.
+Shell examples were syntax-checked, and the backup script was tested against a
+temporary live WAL database. Nginx, systemd, and certificate issuance have not
+been exercised on a VPS by this project yet.
+
+### 1. Choose a server and prepare DNS
+
+- Start with one Linux VPS with persistent local SSD storage. As an initial
+  sizing estimate, 2 vCPUs and 4 GB RAM leave room to build Next.js on the server;
+  this is not a measured production capacity guarantee. Monitor actual usage.
+- Create an Ubuntu 24.04 LTS server and log in over SSH using a non-root account
+  with `sudo`. Keep your SSH key available and follow your provider's SSH setup.
+- Create a DNS **A** record for a hostname such as `llms.example.com`, pointing
+  to the VPS's public IPv4 address. Only add an **AAAA** record if the server's
+  IPv6 routing/firewall is configured too.
+- Replace `YOUR_REPOSITORY_URL`, `YOUR_TESTED_COMMIT`, and `llms.example.com`
+  throughout this tutorial. Push the completed project to the repository first;
+  uncommitted local files are not included in a server-side Git clone. Use a
+  read-only deploy key for a private repository, without embedding credentials
+  in URLs or config files.
+
+The deployed request path is:
+
+```text
+Internet → HTTPS Nginx :443 → Next.js 127.0.0.1:3000
+                                  → FastAPI 127.0.0.1:8000 → SQLite
+                                                            ↕
+                                                  worker + scheduler
+```
+
+All browser traffic, **including `/api/*`**, goes to Next.js. Its existing proxy
+forwards requests to FastAPI. Keep ports 3000 and 8000 private. Next.js recommends
+placing a reverse proxy in front of a self-hosted Node server.
+([Next.js self-hosting guide](https://nextjs.org/docs/app/guides/self-hosting))
+
+### 2. Install system dependencies and create an application user
+
+On the VPS:
+
+```sh
+sudo apt update
+sudo apt install -y git curl ca-certificates xz-utils python3 python3-venv python3-pip nginx sqlite3 ufw snapd cron
+sudo useradd --system --create-home --home-dir /opt/llms-txt --shell /usr/sbin/nologin llms
+sudo install -d -o llms -g llms -m 0755 /opt/llms-txt
+sudo install -d -o llms -g llms -m 0700 /var/lib/llms-txt /var/backups/llms-txt
+sudo install -d -m 0750 /etc/llms-txt
+```
+
+Install **Node.js 24 LTS and npm system-wide** from the official Linux binary
+distribution, matching your VPS architecture and checking its published checksum:
+
+```sh
+(
+set -eu
+node_install_dir="$(mktemp -d /tmp/llms-node.XXXXXX)"
+cd "$node_install_dir"
+case "$(uname -m)" in
+  x86_64) node_arch=x64 ;;
+  aarch64|arm64) node_arch=arm64 ;;
+  *) printf 'Use the official Node installer for this CPU architecture.\n'; exit 1 ;;
+esac
+curl -fsSLO https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt
+node_archive="$(awk -v suffix="-linux-${node_arch}.tar.xz" 'substr($2, length($2)-length(suffix)+1) == suffix { print $2 }' SHASUMS256.txt)"
+test -n "$node_archive"
+curl -fsSLO "https://nodejs.org/dist/latest-v24.x/$node_archive"
+awk -v name="$node_archive" '$2 == name' SHASUMS256.txt | sha256sum -c -
+sudo tar -xJf "$node_archive" -C /usr/local --strip-components=1 --no-same-owner
+)
+hash -r
+```
+
+Run the lines in order and stop if downloading or checksum verification fails.
+This installs the current Node 24 patch under `/usr/local`; for production
+reproducibility, record the downloaded version and checksum with your release.
+See the [official Node.js downloads](https://nodejs.org/en/download). Do not use
+Ubuntu 24.04's older default Node package or a Node installation available only
+inside your personal nvm shell. The service below assumes `/usr/local/bin/node`;
+if using another system-wide installer, update that service path accordingly.
+
+```sh
+node --version
+npm --version
+python3 --version
+command -v node
+sudo -u llms /usr/local/bin/node --version
+```
+
+The last command must work with the **same Node path used in the service**.
+`npm` must also be on the PATH used by the build commands below. Node 24 and
+Python 3.12 from Ubuntu 24.04 satisfy this project's runtime requirements.
+
+### 3. Clone a tested revision, install dependencies, and build
+
+```sh
+sudo -u llms -H git clone YOUR_REPOSITORY_URL /opt/llms-txt/app
+sudo -u llms git -C /opt/llms-txt/app checkout --detach YOUR_TESTED_COMMIT
+sudo -u llms python3 -m venv /opt/llms-txt/app/backend/.venv
+sudo -u llms /opt/llms-txt/app/backend/.venv/bin/python -m pip install -r /opt/llms-txt/app/backend/requirements.txt
+
+sudo -u llms -H sh -c 'cd /opt/llms-txt/app/backend && .venv/bin/python -m pytest -q'
+sudo -u llms -H sh -c 'cd /opt/llms-txt/app/frontend && npm ci --include=dev && npm run lint && npm run build'
+```
+
+Stop if any check fails. Keep `frontend/node_modules` and `.next` on the server;
+this repository uses a normal Next.js Node server, not a static export or a
+standalone bundle. Do not copy a macOS virtual environment or `node_modules` to
+Linux. Install dependencies on the target OS. No Chrome installation is needed
+to run the application; Chrome is only needed for the optional browser tests.
+
+Python dependencies currently use version ranges rather than a committed lock.
+Record the installed versions alongside the commit for rollback:
+
+```sh
+sudo -u llms -H sh -c 'cd /opt/llms-txt/app && backend/.venv/bin/python -m pip freeze > /var/backups/llms-txt/python-$(git rev-parse --short HEAD).txt'
+```
+
+### 4. Configure persistent production environment files
+
+Use `sudoedit /etc/llms-txt/backend.env` to create:
+
+```dotenv
+LLMS_DB_PATH=/var/lib/llms-txt/llms.sqlite3
+LLMS_CHECK_INTERVAL=86400
+LLMS_POLL_INTERVAL=2
+LLMS_JOB_TIMEOUT=300
+LLMS_MAX_PAGES=40
+LLMS_MAX_DEPTH=3
+LLMS_REQUEST_TIMEOUT=15
+LLMS_REQUEST_DELAY=1
+PYTHONUNBUFFERED=1
+```
+
+Create `/etc/llms-txt/frontend.env` with `sudoedit`:
+
+```dotenv
+NODE_ENV=production
+BACKEND_URL=http://127.0.0.1:8000
+```
+
+```sh
+sudo chown root:root /etc/llms-txt/backend.env /etc/llms-txt/frontend.env
+sudo chmod 0600 /etc/llms-txt/backend.env /etc/llms-txt/frontend.env
+```
+
+systemd reads these files before starting each service; use plain `KEY=value`
+lines, without `export`. Both Python services must load the **same backend env**.
+The absolute database path keeps data outside the Git checkout so application
+updates do not replace it. The `llms` user needs write access to its directory
+for SQLite WAL/SHM files and the worker lock. Keep this on a local filesystem,
+not NFS or a shared network volume. There is no need for a production
+`frontend/.env.local`; `BACKEND_URL` is read from the service environment at
+runtime. No CORS configuration or public backend hostname is needed.
+
+### 5. Supervise all three processes with systemd
+
+Create the following files with `sudoedit`. Do not use `--reload`, `next dev`,
+multiple worker services, or a separate scheduler in production.
+
+`/etc/systemd/system/llms-api.service`:
+
+```ini
+[Unit]
+Description=llms.txt FastAPI API
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=llms
+Group=llms
+WorkingDirectory=/opt/llms-txt/app/backend
+EnvironmentFile=/etc/llms-txt/backend.env
+ExecStart=/opt/llms-txt/app/backend/.venv/bin/python -m uvicorn app.api.main:app --host 127.0.0.1 --port 8000 --workers 1
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`/etc/systemd/system/llms-worker.service`:
+
+```ini
+[Unit]
+Description=llms.txt crawler worker and recrawl scheduler
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=llms
+Group=llms
+WorkingDirectory=/opt/llms-txt/app/backend
+EnvironmentFile=/etc/llms-txt/backend.env
+ExecStart=/opt/llms-txt/app/backend/.venv/bin/python -m app.worker
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`/etc/systemd/system/llms-frontend.service`:
+
+```ini
+[Unit]
+Description=llms.txt Next.js frontend and API proxy
+Wants=network-online.target
+After=network-online.target llms-api.service
+
+[Service]
+Type=simple
+User=llms
+Group=llms
+WorkingDirectory=/opt/llms-txt/app/frontend
+EnvironmentFile=/etc/llms-txt/frontend.env
+ExecStart=/usr/local/bin/node /opt/llms-txt/app/frontend/node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+This starts the same Next.js production server as `npm start`, invoking Node
+directly so systemd supervises the actual server process. Adjust the Node path
+if required by step 2. Start and check the services:
+
+```sh
+sudo systemd-analyze verify /etc/systemd/system/llms-api.service /etc/systemd/system/llms-worker.service /etc/systemd/system/llms-frontend.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now llms-api llms-worker llms-frontend
+sudo systemctl status llms-api llms-worker llms-frontend --no-pager
+curl --fail http://127.0.0.1:8000/api/health
+curl --fail http://127.0.0.1:3000/api/health
+```
+
+Both health requests should return `{"status":"ok"}`. API and worker initialize
+the database automatically; retry after a few seconds if startup is still in
+progress. An interrupted running job is recovered when the
+sole worker restarts. Health checks cover API/database availability, **not worker
+liveness**; generation in step 8 verifies the complete flow.
+
+### 6. Put Nginx in front of Next.js
+
+Create `/etc/nginx/conf.d/llms-limits.conf`:
+
+```nginx
+limit_req_zone $binary_remote_addr zone=llms_submissions:10m rate=6r/m;
+```
+
+On Ubuntu this file is included inside Nginx's `http` block. Create
+`/etc/nginx/snippets/llms-proxy.conf`:
+
+```nginx
+proxy_pass http://127.0.0.1:3000;
+proxy_http_version 1.1;
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header Connection "";
+proxy_connect_timeout 5s;
+proxy_read_timeout 30s;
+proxy_buffering off;
+proxy_cache off;
+```
+
+Create `/etc/nginx/sites-available/llms-txt`, replacing the hostname:
+
+```nginx
+server {
+    listen 80;
+    listen [::]:80;
+    server_name llms.example.com;
+    client_max_body_size 16k;
+    limit_req_status 429;
+
+    location ~ ^/api/(generate|websites/[^/]+/refresh)/?$ {
+        limit_req zone=llms_submissions burst=2 nodelay;
+        include /etc/nginx/snippets/llms-proxy.conf;
+    }
+
+    location / {
+        include /etc/nginx/snippets/llms-proxy.conf;
+    }
+}
+```
+
+```sh
+sudo ln -s /etc/nginx/sites-available/llms-txt /etc/nginx/sites-enabled/llms-txt
+sudo nginx -t
+sudo systemctl enable --now nginx
+sudo systemctl reload nginx
+```
+
+Create the symlink only once. On an existing server, preserve other sites and
+check for a conflicting `server_name` before enabling this block. Do not add a
+`location /api` that forwards directly to port 8000: that would bypass the
+frontend proxy. The sample limits generation/refresh requests per client IP;
+job polling every two seconds is left unrestricted. These are starting limits,
+not comprehensive abuse protection. Nginx documents its per-key request limits
+in the [request limiting module](https://nginx.org/en/docs/http/ngx_http_limit_req_module.html).
+
+Crawls run in the worker, so an HTTP connection does not need to stay open for
+the entire crawl. The Nginx 30-second timeout exceeds the existing Next.js proxy's
+20-second per-request deadline; job status is fetched separately. If using a
+CDN, do not cache `/api/*`, and configure trusted real-IP handling before relying
+on per-client rate limits. This example assumes Nginx receives client traffic
+directly, without a CDN.
+
+### 7. Configure the firewall and HTTPS
+
+Allow SSH **before** enabling the firewall. If your SSH port is not 22, allow
+that actual port instead of relying on the `OpenSSH` profile. Keep a second SSH
+session or your provider's console available while changing firewall rules.
+
+```sh
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw enable
+sudo ufw status
+```
+
+Also allow SSH and ports 80/443 in the VPS provider's network firewall. Do not
+allow inbound 3000/8000. The worker needs outbound public DNS and HTTP/HTTPS for
+crawling; do not block that egress. See Ubuntu's
+[firewall guide](https://ubuntu.com/server/docs/how-to/security/firewalls/).
+
+Once DNS resolves to the VPS and HTTP port 80 is reachable, obtain a certificate:
+
+```sh
+sudo snap install --classic certbot
+sudo /snap/bin/certbot --nginx --redirect -d llms.example.com
+sudo nginx -t
+sudo systemctl status snap.certbot.renew.timer --no-pager
+sudo /snap/bin/certbot renew --dry-run
+```
+
+Use one Certbot installation method; do not install competing apt and snap
+versions. Certbot updates the matching Nginx site for TLS and HTTP-to-HTTPS
+redirects. Keep port 80 open for HTTP-01 certificate renewal. See the official
+[Ubuntu HTTPS instructions](https://ubuntu.com/server/docs/how-to/security/obtain-tls-certificates/).
+
+### 8. Verify the deployed application
+
+```sh
+curl --fail https://llms.example.com/api/health
+curl --head https://llms.example.com
+sudo ss -ltnp
+sudo journalctl -u llms-api -u llms-worker -u llms-frontend -n 100 --no-pager
+```
+
+Confirm 3000/8000 listen only on `127.0.0.1`, then open
+`https://llms.example.com` in a browser. Generate `https://example.com`, observe
+completion, inspect the preview and counts, copy and download the file, and
+regenerate it. Test from a mobile viewport too. Check the worker log for the
+completed job; a healthy API with permanently queued jobs is not a successful
+deployment. Verify services remain enabled after a planned reboot.
+
+The app does not upload a generated file to its source website. Download
+`llms.txt` and place it at that website's root yourself. This application has no
+authentication, job-ownership checks, or global queue quotas. IDs are not an
+access-control boundary. Keep a take-home demo restricted to intended reviewers
+using your hosting access controls if needed; per-IP rate limits alone do not
+make an unrestricted public crawler suitable for arbitrary traffic.
+
+### 9. Back up SQLite and test recovery
+
+Use SQLite's online backup operation, not a plain copy of a running WAL-mode
+database. Committed data can still reside in `-wal`. The backup API creates a
+consistent snapshot while API/worker connections remain active.
+([SQLite backup documentation](https://www.sqlite.org/backup.html))
+
+Create `/usr/local/bin/llms-txt-backup` with `sudoedit`:
+
+```sh
+#!/bin/sh
+set -eu
+umask 077
+snapshot="/var/backups/llms-txt/llms-$(date -u +%Y%m%dT%H%M%SZ).sqlite3"
+sqlite3 -readonly -cmd '.timeout 10000' /var/lib/llms-txt/llms.sqlite3 ".backup '$snapshot'"
+test "$(sqlite3 "$snapshot" 'PRAGMA journal_mode=DELETE;')" = delete
+test "$(sqlite3 -readonly "$snapshot" 'PRAGMA integrity_check;')" = ok
+printf '%s\n' "$snapshot"
+```
+
+```sh
+sudo chmod 0755 /usr/local/bin/llms-txt-backup
+sudo -u llms /usr/local/bin/llms-txt-backup
+sudo systemctl enable --now cron
+sudo crontab -u llms -e
+```
+
+Add a nightly schedule to that user's crontab (03:00 in the server's timezone):
+
+```cron
+0 3 * * * /usr/local/bin/llms-txt-backup >> /var/backups/llms-txt/backup.log 2>&1
+```
+
+The script makes each snapshot self-contained in rollback-journal mode before
+checking it; the live source database remains in WAL mode. Copy snapshots to
+private off-VPS storage; a backup on the same disk does not
+protect against losing the VPS. Retain a defined set of daily/weekly copies and
+monitor backup failures/disk usage. Also retain the deployed Git commit, the
+Python package snapshot, `/etc/llms-txt/`, Nginx config, and systemd unit files in
+private backup storage. Do not commit environment files or backups to Git.
+
+For a restore, first validate the chosen snapshot and **stop all three services**.
+Replace `CHOSEN_SNAPSHOT.sqlite3` with the actual backup filename:
+
+```sh
+sudo sqlite3 -readonly /var/backups/llms-txt/CHOSEN_SNAPSHOT.sqlite3 'PRAGMA integrity_check;'
+sudo systemctl stop llms-frontend llms-worker llms-api
+recovery_dir="/var/lib/llms-txt/pre-restore-$(date -u +%Y%m%dT%H%M%SZ)"
+sudo install -d -o llms -g llms -m 0700 "$recovery_dir"
+for suffix in '' '-wal' '-shm'; do
+  if sudo test -e "/var/lib/llms-txt/llms.sqlite3$suffix"; then
+    sudo mv "/var/lib/llms-txt/llms.sqlite3$suffix" "$recovery_dir/"
+  fi
+done
+sudo install -o llms -g llms -m 0600 /var/backups/llms-txt/CHOSEN_SNAPSHOT.sqlite3 /var/lib/llms-txt/llms.sqlite3
+sudo systemctl start llms-api llms-worker llms-frontend
+```
+
+Proceed only if integrity check returned `ok` and all services actually stopped.
+Do not mix the restored database with old WAL/SHM files or delete the worker
+lock to bypass a running worker. Restoring reverts data to the snapshot time;
+retain the moved files for recovery. Recheck health and a stored download after
+restoration, and rehearse the process on a separate test database before relying
+on backups.
+
+### 10. Updates, rollback, and troubleshooting
+
+This simple update procedure has **planned downtime**; do not run `next build`
+over a `.next` directory used by a live server. Record the current Git commit
+and installed Python versions, take a verified backup, and then:
+
+```sh
+sudo systemctl stop llms-frontend llms-worker llms-api
+sudo -u llms git -C /opt/llms-txt/app fetch origin
+sudo -u llms git -C /opt/llms-txt/app checkout --detach YOUR_NEW_TESTED_COMMIT
+sudo -u llms /opt/llms-txt/app/backend/.venv/bin/python -m pip install -r /opt/llms-txt/app/backend/requirements.txt
+sudo -u llms -H sh -c 'cd /opt/llms-txt/app/backend && .venv/bin/python -m pytest -q'
+sudo -u llms -H sh -c 'cd /opt/llms-txt/app/frontend && npm ci --include=dev && npm run lint && npm run build'
+sudo systemctl start llms-api llms-worker llms-frontend
+```
+
+Stop on any failed command; do not start an incomplete build. If unit files
+changed, run `sudo systemctl daemon-reload` before starting services. Environment
+file edits require restarting the affected services. Repeat step 8 after each
+update. No database schema migration framework is implemented; review any future
+schema change and its recovery plan before applying it.
+
+For an application rollback, stop the services, check out the previously
+recorded commit, reinstall frontend dependencies with `npm ci`, restore the
+matching Python dependency snapshot (prefer a fresh virtual environment), rerun
+tests/build, and restart. Keep the persistent database if the older code is
+compatible; restore a database backup only when necessary, understanding that
+newer jobs/generations would be lost. This tutorial does not claim zero-downtime
+or automatic rollback.
+
+| Symptom | Check or action |
+| --- | --- |
+| Nginx returns 502 | Check `systemctl status llms-frontend` and its journal; verify port 3000 and successful `.next` build. |
+| UI cannot reach generation service | Check `/etc/llms-txt/frontend.env`, restart the frontend, and curl both loopback health endpoints. |
+| Jobs remain pending | Check the worker service/logs and matching `LLMS_DB_PATH`; API health alone cannot detect this. |
+| Worker reports another worker | Stop the stray process using the same database; do not remove its lock file to force concurrency. |
+| SQLite permission/read-only errors | Check ownership of `/var/lib/llms-txt` and its files, free space, and that API/worker run as `llms`. |
+| Build is killed or fails from memory pressure | Check RAM/swap and build logs; build on a larger machine or compatible Linux CI if necessary. |
+| Node executable missing in systemd | Use the actual system-wide Node path; service processes do not initialize your nvm shell. |
+| Nginx returns 429 | Submission/refresh rate limit was exceeded; wait, inspect access logs, and tune limits for the intended audience. |
+| HTTPS issuance/renewal fails | Check A/AAAA records, public port 80, matching `server_name`, Certbot logs, and renewal timer. |
+| Crawl fails for one website | Inspect safe job errors and worker logs; robots rules, DNS, timeouts, or JavaScript-only HTML can prevent useful output. |
+
+For ongoing operation, monitor the three services, public health, successful job
+completion/queue age, disk/database growth, backup success, certificate renewal,
+and memory. Systemd captures application logs in the journal; Nginx logs are
+under `/var/log/nginx/`. No frontend analytics, authentication, new database,
+or deployment automation has been added by this tutorial.
