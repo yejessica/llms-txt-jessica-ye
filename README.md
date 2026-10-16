@@ -7,11 +7,13 @@ Redis, or external database is required. The standalone CLI remains available.
 
 **Status:** Phases 1–3 are complete. Frontend lint, type checking, production
 build, 44 mocked browser tests, and one live browser integration test pass.
-89 backend pytest tests and 10 subtests pass, including all 48 Phase 1 tests.
+120 backend pytest tests and 10 subtests pass, including the crawler coverage
+and benchmark regression tests. Two deployment safeguard tests also pass.
 A real `example.com` end-to-end run passed on October 15, 2026: initial generation,
 download, manual refresh, automatic recrawl, unchanged-output deduplication, and
-persistence across an API restart. Phase 1 selection-quality limitations remain;
-the five-site report is in the local `TESTING.md` if available. Phase 4 adds a
+persistence across an API restart. Selection-quality limitations remain; the
+new [coverage benchmark](backend/benchmarks/README.md) measures them explicitly.
+The older five-site report is in the local `TESTING.md` if available. Phase 4 adds a
 Render deployment configuration; public deployment is pending verification.
 
 This is the project's cumulative README. Changes and setup instructions are
@@ -59,6 +61,48 @@ The generated file can be downloaded; this does not publish it to the target sit
 Verified with lint, TypeScript checking, a production build, 44 desktop/mobile
 browser tests, and a real `example.com` crawl through the production frontend,
 API, and worker. The live check also covers reload, copy, download, and refresh.
+
+## Website coverage improvements
+
+The crawler now reads gzip-compressed sitemap files and sitemap indexes, with
+the existing 2 MB response budget also enforced on decompressed XML. Compressed
+children can be discovered through robots.txt or sitemap indexes; decompression
+is detected by gzip bytes, not just the URL extension.
+
+Page crawling defaults to the submitted directory. For example,
+`https://docs.python.org/3/` stays inside `/3/`, including sitemap-discovered pages
+and redirect destinations. Root-level robots.txt and sitemap documents remain
+accessible for discovery and permission checks. Trailing-slash and extensionless
+URLs denote directories; a filename such as `/docs/index.html` uses `/docs/`.
+Use `--crawl-scope site` in the CLI or `LLMS_CRAWL_SCOPE=site` in the worker's
+environment to traverse the entire hostname. The web app uses the worker's
+setting; automatic recrawls use it too. No database migration is needed.
+
+Identical extracted content, titles, and descriptions now collapse to one fetched
+URL even without canonical tags. Matching content with a fetched canonical
+target also confirms an alias. The submitted page is preferred, followed by a
+verified canonical target; cycles retain one representative. Pages with different
+metadata remain separate unless a canonical confirms the match. All fetched
+aliases contribute their outgoing links before deduplication. CLI stats report
+`duplicates_removed` and selected-page URLs/content lengths.
+Archive and ebook downloads are excluded from page traversal so they do not
+consume the HTML crawl budget.
+
+The [12-site coverage benchmark](backend/benchmarks/README.md) measures expected
+key-page coverage, content length, duplicates, scope, failures, and runtime.
+It separates automated candidates from manually reviewed quality passes and
+retains failed/blocked sites in its results. The
+[October 16 live report](backend/benchmarks/results-2026-10-16.md) records 7
+automated candidates, 3 cases needing review, and 2 partial crawls; manual quality
+reviews remain pending. Run from `backend/`:
+
+```sh
+python -m app.benchmark --only example --only python-docs
+python -m app.benchmark --max-pages 20  # all 12 sites, deployment page budget
+```
+
+JavaScript rendering remains unsupported. This batch adds measurement and
+improves HTTP crawling; it does not establish universal website compatibility.
 
 ## Run locally
 
@@ -664,6 +708,7 @@ and load it into both processes, or export variables directly.
 | `LLMS_MAX_DEPTH` | `3` | Discovery depth, range 0–20 |
 | `LLMS_REQUEST_TIMEOUT` | `15` | Per-network-operation timeout |
 | `LLMS_REQUEST_DELAY` | `1` | Minimum request interval; robots policy may increase it |
+| `LLMS_CRAWL_SCOPE` | `directory` | Stay under submitted directory; `site` traverses the hostname |
 
 The existing `CrawlConfig` still supplies response-size, sitemap, discovery,
 retry, and user-agent limits. CLI flags continue to configure standalone CLI
@@ -766,10 +811,10 @@ tests also run via `python -m unittest discover -s tests -v`; run pytest for the
 complete Phase 1 and Phase 2 suite. Unit tests use in-memory HTTP fixtures and
 never contact public sites. The Phase 1 tests cover URL security,
 normalization, sitemaps, BFS, deduplication, extraction, ranking, rendering,
-validation, CLI output, errors, limits, and redirects. The live runner invokes the
-real CLI on five websites with 30-page limits, retaining logs and JSON outcomes.
-A successful live runner process only means attempts were recorded; inspect each
-row's exit code and manually review generated Markdown before assigning Pass.
+validation, CLI output, errors, limits, and redirects. The live runner now invokes
+the real CLI on the [12-site benchmark](backend/benchmarks/README.md), retaining
+logs, JSON outcomes, and Markdown reports. Its exit code reflects automated
+checks; quality passes additionally require review of the exact output bytes.
 
 ### How it works
 
@@ -833,19 +878,20 @@ in SQLite.
 - Directory trailing slashes are preserved because `/docs/` and `/docs` can have
   different relative-link semantics. Repeated slashes and fragments normalize;
   redirect caching removes server-declared aliases. Other distinct URLs with
-  identical content are not merged without a verified canonical.
+  identical extracted content and metadata now merge; differing metadata needs
+  a verified canonical target to confirm an alias.
 - Query-bearing discovered links, common auth/search/cart routes, pagination, and
   non-HTML asset extensions are filtered conservatively. This loses some useful
   query-based pages. Ranking is heuristic and not semantically aware.
-- No JavaScript execution, browser automation, compressed sitemap files, general retries,
+- No JavaScript execution, browser automation, general retries,
   persistent cache, incremental updates, or LLM summaries. Thin server HTML can
   produce thin output even when a browser shows substantial content.
-- Real-world selection still needs review. The Python snapshot includes many
-  alternate documentation versions, and Paul Graham includes both root and
-  index.html. Dependency ranges are constrained but not a reproducible lockfile.
+- Real-world selection still needs review. Directory scope and content
+  deduplication address the earlier alternate-version and homepage/index issues;
+  relevance is still heuristic. Dependency ranges are constrained but not a
+  reproducible lockfile.
 
-Phases 1–3 are implemented. Development stops after the frontend; VPS deployment
-is a separate phase.
+Phases 1–3 are implemented. Public deployment remains a separate phase.
 
 On HTTP 429 the fetcher reads Retry-After (seconds or HTTP date), waits and retries
 once when the requested wait is at most 30 seconds (five seconds without a valid

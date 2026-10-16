@@ -1,10 +1,24 @@
 from xml.etree import ElementTree as ET
+import gzip
+import io
 from urllib.parse import urlsplit, urlunsplit
-from .urls import normalize_url, in_scope
+from .urls import normalize_url, in_scope, in_crawl_scope
 from .fetcher import RateLimitError
 
-def parse_sitemap(data: bytes):
-    if b"<!DOCTYPE" in data.upper() or b"<!ENTITY" in data.upper():
+def parse_sitemap(data: bytes, max_bytes: int = 2_000_000):
+    if len(data) > max_bytes:
+        raise ValueError("Sitemap exceeds size limit")
+    if data.startswith(b"\x1f\x8b"):
+        with gzip.GzipFile(fileobj=io.BytesIO(data)) as stream:
+            data = stream.read(max_bytes + 1)
+        if len(data) > max_bytes:
+            raise ValueError("Decompressed sitemap exceeds size limit")
+    # Sitemaps use UTF-8. Decode before checking declarations so alternate XML
+    # encodings cannot hide entities from the guard ahead of ElementTree.
+    text = data.decode("utf-8-sig")
+    if "\x00" in text:
+        raise ValueError("Sitemap must use UTF-8")
+    if "<!DOCTYPE" in text.upper() or "<!ENTITY" in text.upper():
         raise ValueError("XML declarations with entities are not supported")
     root=ET.fromstring(data)
     kind=root.tag.rsplit("}",1)[-1]
@@ -31,14 +45,15 @@ def discover(fetcher, start, robots_text, config, can_fetch, errors):
             response=fetcher.get(url)
             if response.status_code == 404: continue
             response.raise_for_status()
-            kind,entries=parse_sitemap(response.content)
+            kind,entries=parse_sitemap(response.content, config.max_bytes)
             for loc,lastmod in entries:
                 try: loc=normalize_url(loc,url)
                 except ValueError: continue
                 if not in_scope(loc,start): continue
                 if kind == "sitemapindex":
                     if len(pending)<config.max_sitemaps*10: pending.append(loc)
-                elif len(urls)<config.max_discovered: urls[loc]=lastmod
+                elif in_crawl_scope(loc,start,config.crawl_scope) and len(urls)<config.max_discovered:
+                    urls[loc]=lastmod
         except RateLimitError:
             raise
         except Exception as exc: errors.append(f"Sitemap {url}: {exc}")

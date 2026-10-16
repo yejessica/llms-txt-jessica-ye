@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 from .config import CrawlConfig
 from .crawler.crawler import Crawler
 from .generation import build_generation
+from .analysis.ranking import select_pages
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description="Generate llms.txt from a public website without an LLM")
@@ -16,6 +17,8 @@ def main(argv=None):
     generate.add_argument("url")
     generate.add_argument("--max-pages",type=int,default=40)
     generate.add_argument("--max-depth",type=int,default=3)
+    generate.add_argument("--crawl-scope",choices=["directory", "site"],default="directory",
+                          help="Stay in the submitted directory (default), or crawl the whole hostname")
     generate.add_argument("--delay",type=float,default=1.0,help="Minimum seconds between requests (default: 1)")
     generate.add_argument("--output",type=Path)
     generate.add_argument("--verbose",action="store_true")
@@ -26,7 +29,8 @@ def main(argv=None):
         from .crawler.extractor import trafilatura
         if trafilatura is None:
             print("Warning: Trafilatura unavailable; using BeautifulSoup fallback extraction.",file=sys.stderr)
-        config=CrawlConfig(max_pages=args.max_pages,max_depth=args.max_depth,delay=args.delay)
+        config=CrawlConfig(max_pages=args.max_pages,max_depth=args.max_depth,delay=args.delay,
+                           crawl_scope=args.crawl_scope)
         print(f"Starting crawl: {args.url}\n[1/5] Validating URL...",flush=True)
         result=Crawler(config).crawl(args.url)
         print("[4/5] Ranking pages...",flush=True)
@@ -36,6 +40,11 @@ def main(argv=None):
         output.parent.mkdir(parents=True,exist_ok=True)
         output.write_text(generation.markdown,encoding="utf-8")
         stats=dict(website=result.start,status="partial" if result.errors else "complete",discovered=len(result.discovered),crawled=len(result.pages),selected=generation.pages_selected,attempted=result.attempted,requests=result.requests,blocked=result.blocked,seconds=round(time.monotonic()-started,2),errors=result.errors)
+        stats.update(crawl_scope=config.crawl_scope, duplicates_removed=result.duplicates_removed,
+                     selected_pages=[dict(url=page.url,title=page.title,
+                                          content_characters=len(page.content),
+                                          description_characters=len(page.description))
+                                     for page in select_pages(result)])
         output.with_suffix(".stats.json").write_text(json.dumps(stats,indent=2)+"\n")
         print(f"Successfully generated: {output}\nStatistics:\n"+json.dumps(stats,indent=2))
         if result.errors:

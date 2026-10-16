@@ -51,7 +51,9 @@ def extract(html, url, depth, start):
     meta=soup.find("meta",attrs={"name":re.compile("^description$",re.I)}) or soup.find("meta",attrs={"property":"og:description"})
     for node in soup.select("script,style,nav,header,footer,aside,form,[role=navigation],.advertisement,.ads"):
         node.decompose()
-    extracted=trafilatura.extract(html,include_comments=False,include_tables=False) if trafilatura else None
+    # Strip navigation before either extractor: thin pages otherwise retain nav
+    # text in Trafilatura, preventing identical body content from matching.
+    extracted=trafilatura.extract(str(soup),include_comments=False,include_tables=False) if trafilatura else None
     content=clean(extracted or soup.get_text(" "))
     description=concise(meta.get("content", "")) if meta else ""
     if not description:
