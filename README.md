@@ -179,6 +179,113 @@ flowchart LR
    [llms.txt format](https://llmstxt.org/#format) and against the pages that
    were actually fetched.
 
+### How pages are chosen
+
+Every page must first pass a set of **hard rules**. The pages that pass are then
+**ranked by importance**. The hard rules come from standards and safety needs.
+The importance rules are educated guesses, checked against real websites (see
+[How do we know it works?](#how-do-we-know-it-works)).
+
+```mermaid
+flowchart LR
+    L["Every link<br/>the crawler finds"] --> R{"Hard rules<br/>pass?"}
+    R -- no --> X["Skipped"]
+    R -- yes --> A["<b>Choice A</b><br/>Which pages to visit first<br/>(limited budget)"]
+    A --> B["<b>Choice B</b><br/>Which visited pages<br/>go in the file (≤ 25)"]
+    B --> O["llms.txt"]
+```
+
+#### Hard rules (pass or fail)
+
+| Rule | Why | Source |
+| --- | --- | --- |
+| Public websites only, never private or internal network addresses | Stops the app from being used to attack internal networks (SSRF) | Web-security practice (`crawler/fetcher.py`) |
+| Obey `robots.txt`; at least 1 second between requests | Be a polite crawler | Web convention (`crawler/policy.py`) |
+| Stay inside the submitted folder, on that hostname and its bare/`www.` twin | `docs.python.org/3/` should describe Python 3, not every version and language | Design choice made after testing on real sites (`crawler/urls.py`) |
+| Skip login, signup, search, admin, cart, and checkout pages, `/page/N` pagination, and file downloads (PDF, images, archives, CSS/JS) | They aren't content pages and they waste the budget | `crawler/urls.py` |
+| Stop at the page and depth budget (40 pages and depth 3 locally; 20 and 2 on Render) | Keep crawls fast and memory small | [Configuration](#configuration) |
+| Output must be valid `llms.txt`: one `#` title, optional `>` summary, `##` link sections | That's the format | The [llms.txt spec](https://llmstxt.org/#format) (`generator/validator.py`) |
+
+#### Choice A: which pages to visit first
+
+The page budget is small, so the order matters. The crawler always picks the
+highest-scoring page it knows about next (`crawler/frontier.py`):
+
+1. The page you submitted always comes first.
+2. Links in the site's **menu or header** come next, because the site owner put
+   them there on purpose.
+3. Then links **one click from the start page**.
+4. Pages whose address or link text contains words such as *about, overview,
+   docs, guide, tutorial, reference, products, pricing, contact* get a boost.
+5. **Sitemap** URLs only fill leftover space, and can use at most ¾ of the budget.
+
+The crawler also **spreads the budget across sections**. Each page it visits
+in a section (for example `/blog/`) lowers the priority of the rest of that
+section. Without this, a 20-page budget could be spent entirely on blog posts.
+
+#### Choice B: which pages go into the file
+
+Visited pages earn points (`analysis/ranking.py`) for:
+
+- being the start page or close to it
+- being linked from many other pages, especially from the menu
+- having a real title and description
+- having substantial content (capped, so very long pages don't dominate)
+- having *overview, intro, about, tutorial, guide,* or *docs* in the address
+
+Up to 25 winners are then picked **one per section in turn**, so the file
+covers the whole site instead of ten pages from one corner. For the text of each
+entry, the title comes from `<title>`, falling back to the first heading. The
+description comes from the page's meta description, falling back to the first
+real paragraph. Descriptions are shortened, never rewritten or invented.
+
+> **In one sentence:** the pages a site features most (in its menu, near its
+> homepage, linked often) are probably the ones that matter, and a good summary
+> should cover every major section rather than go deep on one.
+
+#### How do we know it works?
+
+**Solid**
+
+- The hard rules come from the llms.txt spec, robots.txt conventions, and
+  security practice.
+- 166 automated backend tests check that the code does what it was designed to
+  do. For example, one test confirms that a small budget really is spread across
+  sections. These tests show the code matches the design, not that the design
+  is the best one.
+
+**Measured, on a small scale**
+
+- The [12-site benchmark](backend/benchmarks/README.md) covers a deliberately
+  varied mix: documentation sites, a blog, a store, a government portal, NASA, a
+  JavaScript app, and more. For each site, a person wrote down the key pages a
+  good `llms.txt` should include, such as Python's Tutorial, Library, and
+  Reference pages.
+- After the crawl-priority changes, the number of sites passing every automated
+  check went from **7 to 11 of 12**, and partial crawls went from 2 to 0. The
+  twelfth site, NASA, passed after a wrong expected URL in the benchmark was
+  corrected. See the
+  [comparison report](backend/benchmarks/results-crawler-improvements.md).
+
+**Not yet known**
+
+- **The numbers are hand-picked.** The scoring weights were chosen by judgment
+  and adjusted against the benchmark. They weren't derived from data or tuned
+  systematically, so other weights might work as well or better.
+- **The benchmark is graded by its author.** The same person chose the expected
+  pages and the rules. To limit this, expectations change only after inspecting
+  the site, never just to raise the score.
+- **12 sites is a sanity check, not proof** of how well this works across the
+  whole web.
+- **Content quality hasn't been reviewed yet.** "Passing" means the expected
+  links appeared with no errors. A person still has to judge whether the
+  descriptions are accurate and the file is actually useful, and those manual
+  reviews are pending.
+
+**Next steps to strengthen this:** finish the manual reviews, add more sites
+with expected pages chosen by someone else, and compare the output with real
+`llms.txt` files that site owners have published themselves.
+
 ### How data is stored
 
 All state lives in one SQLite file (`backend/data/llms.sqlite3` locally,
