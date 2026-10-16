@@ -43,7 +43,6 @@ meant to help AI assistants find their way around the site.
 9. [Operations: logs, backups, rollback](#operations-logs-backups-rollback)
 10. [Troubleshooting](#troubleshooting)
 11. [Limitations](#limitations)
-12. [Project status](#project-status)
 
 ---
 
@@ -915,22 +914,3 @@ command. Rehearse with `--verify` first.
   Deploys and restarts cause a short downtime.
 - **Unpinned Python dependencies.** `requirements.txt` uses version ranges, not
   a lockfile. Run `pip freeze` after a working deploy if you need an exact record.
-
----
-
-## Project status
-
-| Area | Status |
-| --- | --- |
-| Crawler + CLI | Complete |
-| API, database, worker, automatic re-crawls | Complete |
-| Web frontend, URL shortcuts, version history | Complete |
-| Render deployment | **Live** at <https://llms-txt-jessica-ye.onrender.com>, serving over HTTPS with HTTP redirected to HTTPS |
-| Ubuntu VPS guide | Written; not yet run on a real server |
-
-Verification as of October 2026: the public Render deployment is working, and
-locally, the backend tests, the deployment tests,
-the frontend lint, type check, and build, the mocked browser tests on desktop
-and mobile, and a live end-to-end `example.com` run (generate, download,
-refresh, automatic re-crawl, unchanged-output detection, and persistence across
-restarts) all pass.
