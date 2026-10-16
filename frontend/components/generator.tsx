@@ -13,7 +13,7 @@ const steps = [
   { icon: FileText, title: "Take your file with you", description: "Review, copy, or download your llms.txt. Add it to your site when you’re ready." },
 ];
 
-export function Generator({ initialUrl, initialJobId }: { initialUrl?: string; initialJobId?: string }) {
+export function Generator({ initialUrl, initialJobId, initialVersion }: { initialUrl?: string; initialJobId?: string; initialVersion?: string }) {
   const generation = useGeneration(initialUrl, initialJobId);
   const initial = !generation.result && !generation.busy && !generation.error;
   return (
@@ -38,7 +38,9 @@ export function Generator({ initialUrl, initialJobId }: { initialUrl?: string; i
             {generation.phase === "paused" && <button className="text-button" type="button" onClick={generation.resume}>Check job again <ArrowUpRight size={14} aria-hidden="true" /></button>}
           </div></div>}
           {generation.busy && <GenerationStatus submitting={generation.phase === "submitting"} job={generation.job} url={generation.active?.url} reconnecting={generation.reconnecting} refreshing={!!generation.result} />}
-          {generation.result && <LlmsPreview key={generation.result.job.job_id} result={generation.result} busy={generation.busy} onRegenerate={generation.regenerate} />}
+          {generation.result && <LlmsPreview key={generation.result.job.job_id} result={generation.result} busy={generation.busy} onRegenerate={generation.regenerate}
+            // A version link belongs to the linked job; a later regeneration shows its own result.
+            initialVersion={initialJobId !== undefined && generation.result.job.job_id === initialJobId ? initialVersion : undefined} />}
         </div>
 
         {initial && <section className="how-section" aria-labelledby="how-title" id="how-it-works">

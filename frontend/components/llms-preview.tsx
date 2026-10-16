@@ -18,10 +18,19 @@ function saveFile(content: string) {
   setTimeout(() => URL.revokeObjectURL(href), 1_000);
 }
 
-export function LlmsPreview({ result, busy, onRegenerate }: {
+// Keep the shareable address in step with the version on screen.
+function linkToVersion(generationId: string | null) {
+  const location = new URL(window.location.href);
+  if (generationId) location.searchParams.set("version", generationId);
+  else location.searchParams.delete("version");
+  window.history.replaceState(window.history.state, "", location);
+}
+
+export function LlmsPreview({ result, busy, onRegenerate, initialVersion }: {
   result: GenerationResult;
   busy: boolean;
   onRegenerate: () => void;
+  initialVersion?: string;
 }) {
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -30,6 +39,7 @@ export function LlmsPreview({ result, busy, onRegenerate }: {
   const [historyState, setHistoryState] = useState<"idle" | "loading" | "error">("idle");
   const [loadingVersion, setLoadingVersion] = useState<string | null>(null);
   const [viewing, setViewing] = useState<{ info: GenerationInfo; markdown: string } | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const code = useRef<HTMLElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -45,30 +55,65 @@ export function LlmsPreview({ result, busy, onRegenerate }: {
   const markdown = viewing?.markdown ?? result.markdown;
   const websiteId = result.website.website_id;
 
-  async function loadHistory() {
-    if (history || historyState === "loading") return;
+  // Each request keeps its own signal: after a Strict Mode remount, requests.current
+  // is a fresh controller, and a superseded request must not report its abort.
+  async function loadHistory(): Promise<GenerationInfo[] | null> {
+    if (history) return history;
+    if (historyState === "loading") return null;
+    const signal = requests.current.signal;
     setHistoryState("loading");
     try {
-      setHistory(await api.generations(websiteId, requests.current.signal));
+      const list = await api.generations(websiteId, signal);
+      if (signal.aborted) return null;
+      setHistory(list);
       setHistoryState("idle");
+      return list;
     } catch {
-      if (!requests.current.signal.aborted) setHistoryState("error");
+      if (!signal.aborted) setHistoryState("error");
+      return null;
     }
   }
 
+  function showCurrent() {
+    setViewing(null);
+    linkToVersion(null);
+  }
+
   async function view(info: GenerationInfo) {
-    if (info.is_latest) { setViewing(null); return; }
+    if (info.is_latest) { showCurrent(); return; }
     if (loadingVersion) return;
+    const signal = requests.current.signal;
     setLoadingVersion(info.generation_id);
     setError(null);
     try {
-      const content = await api.version(websiteId, info.generation_id, requests.current.signal);
+      const content = await api.version(websiteId, info.generation_id, signal);
+      if (signal.aborted) return;
       if (!content.trim()) throw new ApiError("That version is empty and can’t be shown.");
       setViewing({ info, markdown: content });
+      linkToVersion(info.generation_id);
     } catch (err) {
-      if (!requests.current.signal.aborted) setError(errorMessage(err));
-    } finally { setLoadingVersion(null); }
+      if (!signal.aborted) setError(errorMessage(err));
+    } finally { if (!signal.aborted) setLoadingVersion(null); }
   }
+
+  useEffect(() => {
+    if (!initialVersion) return;
+    const signal = requests.current.signal;
+    void (async () => {
+      const list = /^[\w-]+$/.test(initialVersion) ? await loadHistory() : [];
+      if (signal.aborted || !list) return;
+      const linked = list.find(item => item.generation_id === initialVersion);
+      if (!linked) {
+        setError("That version link is no longer available. Showing the current file.");
+        linkToVersion(null);
+        return;
+      }
+      setHistoryOpen(true);
+      if (!linked.is_latest) await view(linked);
+    })();
+    // Runs once per linked result; later changes come from the user's own choices.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function copy() {
     setError(null);
@@ -121,7 +166,11 @@ export function LlmsPreview({ result, busy, onRegenerate }: {
         <p>Some pages could not be analyzed. Review the output before using it.</p>
         <ul>{result.job.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
       </details>}
-      <details className="versions" onToggle={event => { if (event.currentTarget.open) void loadHistory(); }}>
+      <details className="versions" open={historyOpen} onToggle={event => {
+        const open = event.currentTarget.open;
+        setHistoryOpen(open);
+        if (open) void loadHistory();
+      }}>
         <summary><History size={14} aria-hidden="true" />Previous versions</summary>
         {historyState === "loading" && <p className="versions-note"><LoaderCircle className="spin" size={13} aria-hidden="true" />Loading versions…</p>}
         {historyState === "error" && <p className="versions-note">Previous versions couldn’t be loaded. <button type="button" className="link-button" onClick={() => void loadHistory()}>Try again</button></p>}
@@ -144,7 +193,7 @@ export function LlmsPreview({ result, busy, onRegenerate }: {
       </details>
       {viewing && <p className="version-banner" role="status">
         Viewing a previous version from <time dateTime={viewing.info.generated_at}>{formatDate(viewing.info.generated_at)}</time>. Copy and download use this version.
-        <button type="button" className="link-button" onClick={() => setViewing(null)}>Back to current</button>
+        <button type="button" className="link-button" onClick={showCurrent}>Back to current</button>
       </p>}
       <div className="preview-card">
         <div className="preview-toolbar">

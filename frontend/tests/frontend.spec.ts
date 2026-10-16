@@ -187,29 +187,38 @@ test("crawl warnings are visible and Markdown is rendered as safe text", async (
   await expect(page.getByLabel("llms.txt Markdown preview").locator("a")).toHaveCount(0);
 });
 
-test("previous versions can be listed, viewed, copied, and dismissed", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  const calls = await mockApi(page);
-  const older = "# Example Domain\n\nAn older overview.\n";
-  let listed = 0;
+const older = "# Example Domain\n\nAn older overview.\n";
+
+async function mockHistory(page: Page) {
+  const calls = { listed: 0 };
   await page.route("**/api/websites/site-1/generations", route => {
-    listed++;
+    calls.listed++;
     return route.fulfill({ json: [
       website.latest_generation,
       { generation_id: "gen-0", content_hash: "old", generated_at: "2026-10-14T09:30:00Z", is_latest: false },
     ] });
   });
   await page.route("**/api/websites/site-1/generations/gen-0", route => route.fulfill({ body: older, contentType: "text/plain" }));
+  return calls;
+}
+
+const versionParam = (page: Page) => new URL(page.url()).searchParams.get("version");
+
+test("previous versions can be listed, viewed, copied, and dismissed", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const calls = await mockApi(page);
+  const history = await mockHistory(page);
   await page.goto("/");
   await submit(page);
   const preview = page.getByLabel("llms.txt Markdown preview");
   await expect(preview).toHaveText(markdown);
-  expect(listed).toBe(0);
+  expect(history.listed).toBe(0);
   await page.getByText("Previous versions", { exact: true }).click();
   await expect(page.getByText("Current", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /^View version from/ }).click();
   await expect(preview).toHaveText(older);
   await expect(page.getByText("Viewing a previous version from", { exact: false })).toBeVisible();
+  expect(versionParam(page)).toBe("gen-0");
   await page.getByRole("button", { name: "Copy", exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(older);
   const download = page.waitForEvent("download");
@@ -218,7 +227,48 @@ test("previous versions can be listed, viewed, copied, and dismissed", async ({ 
   expect(calls.downloads).toBe(0);
   await page.getByRole("button", { name: "Back to current" }).click();
   await expect(preview).toHaveText(markdown);
-  expect(listed).toBe(1);
+  expect(versionParam(page)).toBeNull();
+  expect(new URL(page.url()).searchParams.get("job")).toBe("job-1");
+  expect(history.listed).toBe(1);
+});
+
+test("a version link reopens that previous version, and regenerating drops it", async ({ page }) => {
+  const calls = await mockApi(page);
+  await mockHistory(page);
+  await page.goto("/?url=https%3A%2F%2Fexample.com&job=job-1&version=gen-0");
+  const preview = page.getByLabel("llms.txt Markdown preview");
+  await expect(preview).toHaveText(older);
+  await expect(page.getByText("Viewing a previous version from", { exact: false })).toBeVisible();
+  await expect(page.getByText("Current", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(preview).toHaveText(older);
+  expect(calls.generate).toBe(0);
+  await page.getByRole("button", { name: "Regenerate", exact: true }).click();
+  await expect(page.getByText("Viewing a previous version from", { exact: false })).toHaveCount(0);
+  await expect(preview).toHaveText(markdown);
+  expect(versionParam(page)).toBeNull();
+  expect(calls.refresh).toBe(1);
+});
+
+test("a stale or invalid version link shows the current file with an explanation", async ({ page }) => {
+  await mockApi(page);
+  await mockHistory(page);
+  for (const version of ["gen-gone", "bad/../id"]) {
+    await page.goto(`/?url=https%3A%2F%2Fexample.com&job=job-1&version=${encodeURIComponent(version)}`);
+    await expect(page.getByLabel("llms.txt Markdown preview")).toHaveText(markdown);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("version link is no longer available");
+    expect(versionParam(page)).toBeNull();
+  }
+});
+
+test("a link to the version that is still current keeps its address", async ({ page }) => {
+  await mockApi(page);
+  await mockHistory(page);
+  await page.goto("/?url=https%3A%2F%2Fexample.com&job=job-1&version=gen-1");
+  await expect(page.getByLabel("llms.txt Markdown preview")).toHaveText(markdown);
+  await expect(page.getByText("Current", { exact: true })).toBeVisible();
+  await expect(page.getByText("Viewing a previous version from", { exact: false })).toHaveCount(0);
+  expect(versionParam(page)).toBe("gen-1");
 });
 
 test("version history explains when there are no previous versions", async ({ page }) => {
