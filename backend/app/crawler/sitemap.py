@@ -6,6 +6,7 @@ from urllib.parse import urlsplit, urlunsplit
 from xml.parsers import expat
 import zlib
 import time
+import re
 
 from .urls import site_url, site_origin_allowed, in_crawl_scope, relevant
 from .fetcher import RateLimitError
@@ -16,6 +17,10 @@ CHUNK = 65536
 
 class SitemapBudgetExceeded(ValueError):
     pass
+
+
+class NotSitemap(ValueError):
+    """An HTML fallback at an optional sitemap location, rather than XML."""
 
 
 def xml_chunks(chunks, max_bytes, max_compressed_bytes):
@@ -68,6 +73,13 @@ def parse_sitemap_stream(chunks, on_entry, max_bytes=52_428_800,
     def reject(*args):
         raise ValueError('XML declarations with entities are not supported')
 
+    def doctype(name, system_id, public_id, has_internal_subset):
+        # Ordinary HTML has a doctype too. Classify it before parsing any body,
+        # without permitting XML DTDs, internal subsets or external entities.
+        if name.lower() == 'html' and not has_internal_subset:
+            raise NotSitemap('Server returned HTML instead of sitemap XML')
+        reject()
+
     def declaration(version, encoding, standalone):
         if encoding and encoding.lower().replace('-', '') != 'utf8':
             raise ValueError('Sitemap must use UTF-8')
@@ -79,6 +91,8 @@ def parse_sitemap_stream(chunks, on_entry, max_bytes=52_428_800,
             raise ValueError('Sitemap nesting limit exceeded')
         tag = name.rsplit('}', 1)[-1]
         if depth == 1:
+            if tag.lower() == 'html':
+                raise NotSitemap('Server returned HTML instead of sitemap XML')
             if tag not in {'urlset', 'sitemapindex'}:
                 raise ValueError('Not a sitemap')
             kind = tag
@@ -112,19 +126,32 @@ def parse_sitemap_stream(chunks, on_entry, max_bytes=52_428_800,
     parser.StartElementHandler = begin
     parser.EndElementHandler = end
     parser.CharacterDataHandler = characters
-    parser.StartDoctypeDeclHandler = reject
+    parser.StartDoctypeDeclHandler = doctype
     parser.EntityDeclHandler = reject
     parser.ExternalEntityRefHandler = reject
     parser.XmlDeclHandler = declaration
     parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
+    prefix = ''
+    started = False
     for block in xml_chunks(chunks, max_bytes, max_compressed_bytes):
         if on_bytes:
             on_bytes(len(block))
         value = decoder.decode(block)
         if '\x00' in value:
             raise ValueError('Sitemap must use UTF-8')
+        if not started:
+            # Some valid HTML doctypes are not valid XML declarations. Recognize
+            # a plain HTML doctype before Expat rejects that syntax. Buffer only
+            # the beginning, and keep internal subsets on the strict XML path.
+            prefix += value
+            if '>' not in prefix and len(prefix) < 2048:
+                continue
+            if ('>' in prefix and re.match(r'^\s*<!doctype\s+html(?:\s|>)', prefix, re.I)
+                    and '[' not in prefix.split('>', 1)[0]):
+                raise NotSitemap('Server returned HTML instead of sitemap XML')
+            value, started = prefix, True
         parser.Parse(value, False)
-    parser.Parse(decoder.decode(b'', final=True), True)
+    parser.Parse(('' if started else prefix) + decoder.decode(b'', final=True), True)
     return kind
 
 
@@ -155,10 +182,13 @@ def discover(fetcher, start, robots_text, config, can_fetch, errors):
     p = urlsplit(start)
     origin = urlunsplit((p.scheme, p.netloc, '/', '', ''))
     pending = [site_url('/sitemap.xml', start, origin)]
+    declared = set()
     for line in robots_text.splitlines():
         if line.lower().startswith('sitemap:'):
             try:
-                pending.append(site_url(line.split(':', 1)[1].strip(), start, origin))
+                location = site_url(line.split(':', 1)[1].strip(), start, origin)
+                pending.append(location)
+                declared.add(location)
             except ValueError:
                 pass
     visited = set()
@@ -185,7 +215,7 @@ def discover(fetcher, start, robots_text, config, can_fetch, errors):
                 continue
             allowed = lambda u: site_origin_allowed(u, start) and can_fetch(u)
             with sitemap_response(fetcher, url, allowed) as (response, chunks):
-                if response.status_code == 404:
+                if response.status_code in (404, 410):
                     continue
                 response.raise_for_status()
                 # A document's candidates remain bounded and only enter the
@@ -215,6 +245,13 @@ def discover(fetcher, start, robots_text, config, can_fetch, errors):
                 for child in children:
                     if len(pending) < config.max_sitemaps * 10:
                         pending.append(child)
+                        declared.add(child)
+        except NotSitemap as exc:
+            # /sitemap.xml is a conventional probe, not a promise from the site.
+            # HTML soft-404s and app fallback routes are common. A URL explicitly
+            # advertised by robots.txt or an index remains a reportable problem.
+            if url in declared:
+                errors.append(f'Sitemap {url}: {exc}')
         except SitemapBudgetExceeded as exc:
             errors.append(f'Sitemap {url}: {exc}')
             break

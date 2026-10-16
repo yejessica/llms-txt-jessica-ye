@@ -2,6 +2,12 @@ import { type NextRequest, NextResponse } from "next/server";
 
 export function GET(request: NextRequest) {
   const path = request.nextUrl.pathname.slice(1);
+  // A guessed metadata filename is not a hostname shortcut. Specific metadata
+  // routes, if added later, take precedence over this catch-all.
+  const firstSegment = path.split("/", 1)[0];
+  if (/\.(?:xml(?:\.gz)?|txt|json|webmanifest|ico)$/i.test(firstSegment)) {
+    return new Response("Not found", { status: 404 });
+  }
   // Leave ordinary unknown app routes as 404s. API and static routes take
   // precedence over this catch-all and retain their existing behavior.
   if (!/^[^/]+\.[^/]+/.test(path) && !/^[a-z][a-z\d+.-]*:\//i.test(path)) {

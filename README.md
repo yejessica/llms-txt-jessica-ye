@@ -6,8 +6,8 @@ a separate serial worker, and automatic scheduled recrawls. No LLM key, Docker,
 Redis, or external database is required. The standalone CLI remains available.
 
 **Status:** Phases 1–3 are complete. Frontend lint, type checking, production
-build, 44 mocked browser tests, and one live browser integration test pass.
-146 backend pytest tests and 10 subtests pass, including the crawler coverage
+build, 48 mocked browser tests, and one live browser integration test pass.
+157 backend pytest tests and 10 subtests pass, including the crawler coverage
 and benchmark regression tests. Two deployment safeguard tests also pass.
 A real `example.com` end-to-end run passed on October 15, 2026: initial generation,
 download, manual refresh, automatic recrawl, unchanged-output deduplication, and
@@ -58,9 +58,18 @@ URL-encoded target, for example
 Fragments in a directly pasted shortcut are browser-only and are not submitted.
 The generated file can be downloaded; this does not publish it to the target site.
 
-Verified with lint, TypeScript checking, a production build, 44 desktop/mobile
+Verified with lint, TypeScript checking, a production build, 48 desktop/mobile
 browser tests, and a real `example.com` crawl through the production frontend,
 API, and worker. The live check also covers reload, copy, download, and refresh.
+
+Root metadata filenames such as `/sitemap.xml`, `/robots.txt`, and `/llms.txt`
+return 404 when no specific route serves them. They are not interpreted as
+hostname shortcuts. Specific metadata routes or files added later take precedence.
+A site's sitemap is optional: HTML returned by a conventional `/sitemap.xml`
+probe is treated as an absent sitemap, while HTML at a sitemap explicitly
+advertised in robots.txt or an index produces a clear warning. XML DTD/entity
+protections remain enabled. A one-page local crawl of the public Render site
+verified this fallback with zero warnings; the route fix requires deployment.
 
 ## Website coverage improvements
 
