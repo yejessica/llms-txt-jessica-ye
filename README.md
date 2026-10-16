@@ -1,1354 +1,767 @@
 # Automated llms.txt Generator
 
-Generate a structured llms.txt from a public website. A Next.js frontend connects
-to the deterministic Python crawler through FastAPI, with SQLite persistence,
-a separate serial worker, and automatic scheduled recrawls. No LLM key, Docker,
-Redis, or external database is required. The standalone CLI remains available.
+Type in a website address and this app visits the site, reads its most important
+pages, and writes an [`llms.txt`](https://llmstxt.org/) file for it. An
+`llms.txt` file is a short Markdown summary of a website, with links, that is
+meant to help AI assistants find their way around the site.
 
-**Status:** Phases 1–3 are complete. Frontend lint, type checking, production
-build, 44 mocked browser tests, and one live browser integration test pass.
-89 backend pytest tests and 10 subtests pass, including all 48 Phase 1 tests.
-A real `example.com` end-to-end run passed on October 15, 2026: initial generation,
-download, manual refresh, automatic recrawl, unchanged-output deduplication, and
-persistence across an API restart. Phase 1 selection-quality limitations remain;
-the five-site report is in the local `TESTING.md` if available. Phase 4 adds a
-Render deployment configuration; public deployment is pending verification.
+- **No AI or API keys needed.** The output is built by fixed rules
+  (deterministic), not by a language model.
+- **No Docker, Redis, or database server.** Everything is stored in one
+  [SQLite](https://www.sqlite.org/) file.
+- **Keeps itself up to date.** Sites you have generated before are re-crawled
+  automatically (once a day by default). A new version is saved only if the
+  output changed.
+- **Three ways to use it:** a web app, a command-line tool (CLI), or an HTTP API.
 
-This is the project's cumulative README. Changes and setup instructions are
-grouped by phase below, newest first, with earlier phases preserved.
+```text
+# Illustrative example of the output format (abridged)
+# Python 3 Documentation
 
-| Phase | Changes introduced | Status |
-| --- | --- | --- |
-| [Phase 1 — Crawler and CLI](#phase-1--crawler-and-cli) | Safe crawling, extraction, ranking, Markdown generation/validation, and a standalone CLI | Complete |
-| [Phase 2 — Backend](#phase-2--backend-api-persistence-and-automatic-refresh) | FastAPI routes, SQLite persistence, background jobs, manual refresh, and scheduled recrawls | Complete |
-| [Phase 3 — Frontend](#phase-3--frontend) | Next.js interface, API proxy, job polling/recovery, preview, copy/download, regeneration, and browser tests | Complete |
-| [Phase 4 — Managed deployment](#phase-4--managed-deployment-render) | One Render service, persistent SQLite, process supervision, submission limits, backups, and operations | Configuration prepared; live verification pending |
+> The official documentation for the Python programming language.
 
-**Tutorials:** [Run locally](#run-locally) · [Deploy to Render](#phase-4--managed-deployment-render) · [Alternative: VPS](#deployment-guide--single-ubuntu-vps)
+## Tutorial
+- [The Python Tutorial](https://docs.python.org/3/tutorial/): An informal introduction to Python…
 
-## URL shortcut
+## Library
+- [The Python Standard Library](https://docs.python.org/3/library/): Reference for modules…
+```
 
-Append a public website to the app's address to start generating automatically:
+## Contents
+
+1. [Key terms](#key-terms)
+2. [How it works](#how-it-works)
+3. [Repository layout](#repository-layout)
+4. [Run it on your computer](#run-it-on-your-computer)
+5. [Using the app](#using-the-app)
+6. [Configuration](#configuration)
+7. [Testing](#testing)
+8. [Deploy to Render](#deploy-to-render)
+9. [Operations: logs, backups, rollback](#operations-logs-backups-rollback)
+10. [Troubleshooting](#troubleshooting)
+11. [Limitations](#limitations)
+12. [Project status](#project-status)
+
+---
+
+## Key terms
+
+If you are new to web development, these are the terms used throughout this guide.
+
+| Term | What it means here |
+| --- | --- |
+| **Frontend** | The part you see in the browser. Built with [Next.js](https://nextjs.org/) (a React framework), in `frontend/`. |
+| **Backend / API** | A Python web server ([FastAPI](https://fastapi.tiangolo.com/)) that accepts requests such as "generate a file for this URL" and returns results. In `backend/app/api/`. |
+| **Worker** | A separate, long-running Python process that does the slow work (crawling websites) in the background, so the API can answer quickly. |
+| **Scheduler** | Code inside the worker that decides when a site is due for a re-crawl. It is not a separate program. |
+| **Job** | One request to crawl a site. A job moves through `pending` → `running` → `completed` or `failed`. |
+| **Generation** | One saved version of a site's `llms.txt`. A site can have many. |
+| **Crawl** | Visiting a page, collecting its links, then visiting those pages, up to a limit. |
+| **robots.txt / sitemap** | Files that websites publish to tell crawlers what they may visit (`robots.txt`) and which pages exist (`sitemap.xml`). This crawler obeys `robots.txt`. |
+| **Proxy** | A middleman. The Next.js server passes the browser's `/api/...` requests on to FastAPI, so the browser only ever talks to one address. |
+| **Environment variable** | A named setting (for example `LLMS_MAX_PAGES=40`) given to a program when it starts, instead of being written into the code. |
+| **Virtual environment (venv)** | A private folder of Python packages for this project, so they don't clash with other projects. |
+| **Render** | A hosting company. This repo includes a ready-made configuration (`render.yaml`) for it. |
+
+---
+
+## How it works
+
+### The big picture
+
+The app is made of **three programs** that cooperate, plus **one database file**:
+
+```mermaid
+flowchart LR
+    User(["👤 You, in a browser"])
+
+    subgraph App["This application"]
+        direction LR
+        FE["<b>Frontend</b><br/>Next.js<br/>web page + /api proxy"]
+        API["<b>API</b><br/>FastAPI<br/>accepts requests, returns results"]
+        DB[("<b>SQLite file</b><br/>websites · jobs ·<br/>generations · pages")]
+        W["<b>Worker</b><br/>crawls sites<br/>+ scheduler for re-crawls"]
+    end
+
+    Site(["🌐 The website<br/>being summarized"])
+
+    User -->|"opens page, clicks Generate"| FE
+    FE -->|"forwards /api/* requests"| API
+    API -->|"saves a job; reads results"| DB
+    W -->|"picks up jobs; saves llms.txt"| DB
+    W -->|"downloads robots.txt, sitemaps, pages"| Site
+```
+
+The important idea: **the API never crawls.** Crawling can take minutes, so the
+API only writes a "please crawl this" job into the database and answers right
+away. The worker, running separately, picks up the job, does the crawl, and
+saves the result. The browser keeps asking "is it done yet?" every two seconds.
+Using the database as the job queue means no extra queue service (such as Redis)
+is needed.
+
+### What happens when you click "Generate"
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as Browser
+    participant FE as Next.js (frontend + proxy)
+    participant API as FastAPI
+    participant DB as SQLite
+    participant W as Worker
+    participant S as Target website
+
+    U->>FE: POST /api/generate {"url": "https://example.com"}
+    FE->>API: forward request
+    API->>API: check the URL is public and safe
+    API->>DB: insert website + job (status "pending")
+    API-->>U: 202 Accepted {job_id, website_id}
+
+    loop every 2 seconds
+        U->>FE: GET /api/jobs/{job_id}
+        FE->>API: forward
+        API->>DB: read job status
+        API-->>U: "pending" / "running" / "completed"
+    end
+
+    W->>DB: claim next pending job → "running"
+    W->>S: fetch robots.txt, sitemap.xml, pages (politely, one at a time)
+    S-->>W: HTML
+    W->>W: extract → rank → render → validate
+    W->>DB: save generation (Markdown) + mark job "completed"
+
+    U->>FE: GET /api/websites/{website_id}/llms.txt
+    FE->>API: forward
+    API->>DB: read latest generation
+    API-->>U: the llms.txt text (shown as a preview)
+```
+
+### Inside the crawler
+
+The same pipeline is used by the worker and by the command-line tool. It lives
+in `backend/app/` and is split into small steps:
+
+```mermaid
+flowchart LR
+    A["1 · Safe fetch<br/><i>crawler/fetcher.py</i><br/>only public IPs,<br/>obeys robots.txt"] --> B["2 · Discover pages<br/><i>crawler/sitemap.py,<br/>crawler/crawler.py</i><br/>sitemaps + follow links"]
+    B --> C["3 · Extract<br/><i>crawler/extractor.py</i><br/>title, description,<br/>main text, links"]
+    C --> D["4 · De-duplicate<br/><i>crawler/dedup.py</i><br/>merge identical pages"]
+    D --> E["5 · Rank & select<br/><i>analysis/ranking.py</i><br/>pick up to 25<br/>key pages"]
+    E --> F["6 · Render<br/><i>generator/renderer.py</i><br/>write Markdown"]
+    F --> G["7 · Validate<br/><i>generator/validator.py</i><br/>check format<br/>and links"]
+```
+
+1. **Safe fetching.** Before every connection, the crawler looks up the site's
+   IP address and refuses anything private (such as `127.0.0.1` or `10.x.x.x`).
+   This stops someone from using the app to probe internal networks (an attack
+   called SSRF). Redirects are checked the same way. Responses are capped at
+   2 MB.
+2. **Discovering pages.** The crawler reads `robots.txt` and any sitemaps
+   (including gzip-compressed ones), then does a *breadth-first* crawl: first the
+   page you submitted, then the pages it links to, then the pages *those* link
+   to, up to the depth and page limits. By default it stays inside the folder
+   you submitted. For example, `https://docs.python.org/3/` stays under `/3/`.
+3. **Extraction.** [BeautifulSoup](https://www.crummy.com/software/BeautifulSoup/)
+   reads titles, descriptions, headings, and links.
+   [Trafilatura](https://trafilatura.readthedocs.io/) pulls out the main body text.
+4. **De-duplication.** Pages with identical content and metadata (for example
+   `/docs/` and `/docs/index.html`) are merged into one.
+5. **Ranking.** Each page gets a score from simple signals: how close it is to
+   the start page, how often other pages link to it, whether it is in the
+   navigation, whether it has a title and description, and how much content it has.
+   Up to 25 pages are chosen, spread across the site's sections.
+6. **Rendering.** The selected pages become Markdown: one `#` title, an optional
+   `>` summary, and `##` sections of links.
+7. **Validation.** The output is checked against the
+   [llms.txt format](https://llmstxt.org/#format) and against the pages that
+   were actually fetched.
+
+### How data is stored
+
+All state lives in one SQLite file (`backend/data/llms.sqlite3` locally,
+`/var/data/llms.sqlite3` on Render). Tables are created automatically on first
+start, so there are no migrations to run. The schema is in `backend/app/database.py`.
+
+```mermaid
+erDiagram
+    websites ||--o{ jobs : "has many"
+    websites ||--o{ generations : "has many versions"
+    websites ||--o{ pages : "has many"
+
+    websites {
+        text website_id PK
+        text original_url
+        text normalized_url "unique"
+        text title
+        text status "pending | running | completed | failed"
+        real last_crawl_at
+        real last_successful_generation_at
+        real next_check_at "when the scheduler re-crawls"
+    }
+    jobs {
+        text job_id PK
+        text website_id FK
+        text job_type "initial | scheduled"
+        text status "pending | running | completed | failed"
+        int  pages_crawled
+        int  pages_selected
+        text warnings
+        int  output_changed
+        text error
+    }
+    generations {
+        text generation_id PK
+        text website_id FK
+        text markdown "the llms.txt content"
+        text content_hash "SHA-256; detects unchanged output"
+        int  is_latest
+        real generated_at
+    }
+    pages {
+        text website_id FK
+        text url
+        text title
+        text description
+        text content_hash
+        real last_observed_at
+    }
+```
+
+Each re-crawl compares the new Markdown's SHA-256 fingerprint with the latest
+version. If it's identical, the job completes with `output_changed: false` and
+no new version is stored. Older versions are kept and can be viewed in the app.
+
+### How automatic re-crawling works
+
+```mermaid
+flowchart TD
+    Start(["Worker loop<br/>(every 2 s when idle)"]) --> Due{"Any website with<br/>next_check_at in the past?"}
+    Due -- yes --> Queue["Queue a 'scheduled' job"]
+    Due -- no --> Claim
+    Queue --> Claim{"Any pending job?"}
+    Claim -- no --> Start
+    Claim -- yes --> Run["Crawl → generate llms.txt"]
+    Run --> Same{"Same as the<br/>latest version?"}
+    Same -- yes --> Keep["Mark job completed,<br/>output_changed = false"]
+    Same -- no --> Save["Save new generation,<br/>mark it latest"]
+    Keep --> Next["Set next_check_at =<br/>now + LLMS_CHECK_INTERVAL"]
+    Save --> Next
+    Next --> Start
+```
+
+Only **one worker** may use a database at a time. It holds a lock file
+(`llms.sqlite3.worker.lock`, next to the database), and a second worker exits with an error.
+If the worker is stopped mid-crawl, that job is re-queued the next time it starts.
+
+---
+
+## Repository layout
+
+```text
+llms-txt-jessica-ye/
+├── README.md                 ← you are here
+├── render.yaml               ← Render hosting configuration ("Blueprint")
+├── .node-version             ← Node.js version for Render (24)
+├── .python-version           ← Python version for Render (3.13)
+│
+├── backend/                  ← Python: crawler, API, worker
+│   ├── requirements.txt      ← Python packages to install
+│   ├── .env.example          ← sample settings; copy to .env
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── main.py       ← FastAPI routes (/api/generate, /api/jobs/…)
+│   │   │   └── schemas.py    ← shapes of API requests/responses
+│   │   ├── crawler/
+│   │   │   ├── fetcher.py    ← safe HTTP fetching, robots.txt, rate limits
+│   │   │   ├── sitemap.py    ← sitemap.xml discovery (incl. .gz)
+│   │   │   ├── crawler.py    ← breadth-first crawl
+│   │   │   ├── extractor.py  ← pull title/description/text/links from HTML
+│   │   │   ├── dedup.py      ← merge duplicate pages
+│   │   │   └── urls.py       ← URL cleanup and scope rules
+│   │   ├── analysis/ranking.py   ← score and select pages
+│   │   ├── generator/
+│   │   │   ├── renderer.py   ← build the llms.txt Markdown
+│   │   │   └── validator.py  ← check the output
+│   │   ├── generation.py     ← runs crawl → rank → render → validate
+│   │   ├── database.py       ← SQLite tables and queries
+│   │   ├── worker.py         ← background job runner (python -m app.worker)
+│   │   ├── scheduler.py      ← decides when to re-crawl
+│   │   ├── settings.py       ← reads LLMS_* environment variables
+│   │   ├── config.py         ← crawler limits (CrawlConfig)
+│   │   ├── cli.py            ← command-line tool (python -m app.cli)
+│   │   └── benchmark.py      ← 12-site quality benchmark
+│   ├── benchmarks/           ← benchmark site list and results
+│   └── tests/                ← pytest tests (offline) + optional live runs
+│
+├── frontend/                 ← Next.js web app
+│   ├── app/
+│   │   ├── page.tsx          ← the main page
+│   │   ├── api/[...path]/route.ts   ← proxy: /api/* → FastAPI
+│   │   └── [...target]/route.ts     ← URL shortcut: /example.com → generate
+│   ├── components/           ← URL form, status, preview, version picker
+│   ├── lib/                  ← API client, types, job polling logic
+│   ├── tests/                ← Playwright browser tests
+│   ├── .env.example          ← sample settings; copy to .env.local
+│   └── package.json
+│
+├── deploy/                   ← production-only helpers (used by Render)
+│   ├── build.sh              ← install, test, and build everything
+│   ├── run.py                ← starts API + worker + frontend together
+│   ├── api.py                ← FastAPI app + submission rate limit
+│   ├── backup.py             ← verified SQLite backups
+│   └── test_deployment.py
+│
+└── docs/
+    └── deploy-vps.md         ← alternative: self-host on an Ubuntu server
+```
+
+---
+
+## Run it on your computer
+
+These steps are for **macOS or Linux**. Windows isn't supported directly,
+because the worker relies on Unix signals. On Windows, use
+[WSL](https://learn.microsoft.com/windows/wsl/install) and follow the Linux steps.
+
+### 1. Install the prerequisites
+
+| Tool | Version | Check with | Get it from |
+| --- | --- | --- | --- |
+| Git | any | `git --version` | <https://git-scm.com/downloads> |
+| Python | 3.11 or newer | `python3 --version` | <https://www.python.org/downloads/> |
+| Node.js (includes npm) | 24 LTS recommended (20.19+ or 22.13+ also work) | `node --version` | <https://nodejs.org/> or [nvm](https://github.com/nvm-sh/nvm) |
+
+### 2. Get the code
+
+```sh
+git clone https://github.com/yejessica/llms-txt-jessica-ye.git
+cd llms-txt-jessica-ye
+```
+
+### 3. Start the three programs
+
+You need **three terminal windows**, one per program, each opened in the
+repository folder. Leave all three running.
+
+```mermaid
+flowchart LR
+    T1["Terminal 1<br/><b>API</b><br/>127.0.0.1:8000"]
+    T2["Terminal 2<br/><b>Worker</b><br/>(no port)"]
+    T3["Terminal 3<br/><b>Frontend</b><br/>localhost:3000"]
+    DB[("backend/data/<br/>llms.sqlite3")]
+    T3 -->|proxy| T1
+    T1 --- DB
+    T2 --- DB
+```
+
+**Terminal 1: the API**
+
+```sh
+cd backend
+python3 -m venv .venv                      # create a private Python environment (first time only)
+source .venv/bin/activate                  # turn it on (every time)
+python -m pip install -r requirements.txt  # install packages (first time, or when requirements change)
+test -f .env || cp .env.example .env       # create your settings file if it doesn't exist
+set -a; source .env; set +a                # load the settings into this terminal
+uvicorn app.api.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+You should see `Uvicorn running on http://127.0.0.1:8000`.
+
+**Terminal 2: the worker**
+
+```sh
+cd backend
+source .venv/bin/activate
+set -a; source .env; set +a
+python -m app.worker
+```
+
+> ⚠️ Without the worker, jobs stay **pending** forever. The API and worker must
+> load the **same** `.env` file so that they use the same database file.
+
+**Terminal 3: the frontend**
+
+```sh
+cd frontend
+# If you use nvm: nvm install && nvm use
+npm ci                                            # install packages (first time, or when package-lock.json changes)
+test -f .env.local || cp .env.example .env.local  # points the proxy at http://127.0.0.1:8000
+npm run dev -- --hostname 127.0.0.1
+```
+
+### 4. Try it
+
+| Open | What it is |
+| --- | --- |
+| <http://localhost:3000> | The app |
+| <http://127.0.0.1:8000/docs> | Interactive API documentation (try requests in the browser) |
+| <http://localhost:3000/api/health> | Health check; should show `{"status":"ok"}` |
+
+Enter `https://example.com`, click generate, and wait a few seconds. Then try
+**Copy**, **Download**, and **Regenerate**. Larger sites can take a few minutes.
+
+Stop each program with **Ctrl+C**. Your data stays in `backend/data/`. The next
+time, you only need the `source` lines and the start commands; skip the
+install steps unless dependencies changed.
+
+> **Tip:** To see automatic re-crawling quickly, set `LLMS_CHECK_INTERVAL=10` in
+> `backend/.env` and restart the API and worker. Sites will then re-crawl every
+> 10 seconds instead of once a day.
+
+---
+
+## Using the app
+
+### Web interface
+
+Paste a URL, click generate, and watch the status. When it finishes you can
+preview the Markdown, copy it, download `llms.txt`, regenerate it, or browse and
+share links to **previous versions**. The app doesn't upload anything to the
+target website. To publish an `llms.txt`, download it and place it at the root
+of your own site (for example `https://yoursite.com/llms.txt`).
+
+### URL shortcut
+
+Put a website after the app's address to start generating straight away:
 
 ```text
 http://localhost:3000/example.com
 http://localhost:3000/https://example.com/docs/
 ```
 
-Replace `http://localhost:3000` with the deployed app's origin when hosted.
-Bare domains default to HTTPS; explicit HTTP and HTTPS URLs are supported.
-Paths, trailing slashes, and query parameters are passed to the existing crawler.
-The app redirects to its generation screen, fills in the target URL, and shows
-the usual progress, preview, copy, and download controls. Crawling still takes
-time and follows the same public-URL validation, robots rules, crawl scope,
-submission limits, and page budgets as manual submission.
+Bare domains default to `https://`. After submission the address bar includes
+the job ID, so you can reload or share that link to reopen the same result
+without starting a new crawl. For URLs with `#` fragments or unusual characters,
+use the encoded form: `/?url=https%3A%2F%2Fexample.com%2Fdocs%3Fversion%3D2`.
 
-Once submitted, the address includes the target and job ID. Reloading or sharing
-that resulting link reopens the job, including a completed result, without
-submitting a new crawl. Use **Regenerate** to request a fresh crawl. Opening the
-original shortcut again requests generation (reusing an active job for the same
-normalized target). A new shortcut target takes precedence over another job
-saved in the browser. A missing job shows an error and lets you submit again.
+### Command-line tool (no web app needed)
 
-For URLs with fragments or unusual escaping, use the query form with a
-URL-encoded target, for example
-`/?url=https%3A%2F%2Fexample.com%2Fdocs%3Fversion%3D2`.
-Fragments in a directly pasted shortcut are browser-only and are not submitted.
-The generated file can be downloaded; this does not publish it to the target site.
-
-Verified with lint, TypeScript checking, a production build, 44 desktop/mobile
-browser tests, and a real `example.com` crawl through the production frontend,
-API, and worker. The live check also covers reload, copy, download, and refresh.
-
-## Run locally
-
-Use **three terminals**, all starting in the repository root. Prerequisites:
-Python 3.11+, Node.js 24 LTS (recommended), npm, and Git. No API keys or external
-database are needed. The commands below use macOS/Linux shell syntax.
-
-**Terminal 1 — install and start FastAPI:**
-
-```sh
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-test -f .env || cp .env.example .env
-set -a
-source .env
-set +a
-uvicorn app.api.main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-For subsequent runs, skip creating the virtual environment and installing
-dependencies unless they have changed. Preserve any existing customized `.env`.
-
-**Terminal 2 — start the worker and automatic recrawl scheduler:**
+The CLI runs the crawler once and writes files to disk. It doesn't use the
+database or the worker.
 
 ```sh
 cd backend
 source .venv/bin/activate
-set -a
-source .env
-set +a
-python -m app.worker
+python -m app.cli generate https://example.com
+
+python -m app.cli generate https://docs.python.org/3/ \
+  --max-pages 30 --max-depth 3 \
+  --output ./output/python-llms.txt --verbose
 ```
 
-API and worker must load the **same** `backend/.env` and database path. Keep this
-terminal running: without the worker, submissions remain queued. Only one worker
-may use a database at a time; no separate scheduler process is needed.
-
-**Terminal 3 — install and start Next.js:**
-
-```sh
-cd frontend
-# If you use nvm: nvm install && nvm use
-npm ci
-test -f .env.local || cp .env.example .env.local
-npm run dev -- --hostname 127.0.0.1
-```
-
-The frontend environment should contain `BACKEND_URL=http://127.0.0.1:8000`
-(without `/api`). Next.js loads `.env.local` automatically. For later runs,
-`npm run dev -- --hostname 127.0.0.1` is sufficient if dependencies are unchanged.
-
-| Open | Address |
-| --- | --- |
-| Application | <http://localhost:3000> |
-| FastAPI interactive documentation | <http://127.0.0.1:8000/docs> |
-| API/database health | <http://127.0.0.1:8000/api/health> |
-| Same health endpoint through the frontend proxy | <http://localhost:3000/api/health> |
-
-Enter `https://example.com` in the app, generate, wait for completion, then try
-copy, download, and regenerate. Larger sites may take a few minutes. Stop each
-terminal with **Ctrl+C**. SQLite data remains in `backend/data/` with the example
-configuration. Logs appear in the API/worker terminals; queued work resumes when
-the worker starts again. For a production-mode local check, replace the third
-terminal's dev command with `npm run build` followed by `npm start`.
-
-## Architecture
-
-```mermaid
-flowchart TB
-    Browser["Browser"]
-
-    subgraph Phase3["Phase 3 · Frontend"]
-        UI["Next.js App Router / React UI<br/>URL form · status · Markdown preview"]
-        Client["Typed API client · native fetch<br/>2-second job polling · copy/download/refresh"]
-        Proxy["Next.js /api/* proxy<br/>Server-only BACKEND_URL · no caching"]
-        UI --> Client
-        Client -->|"Same-origin requests"| Proxy
-    end
-
-    subgraph Phase2["Phase 2 · Backend and background processing"]
-        API["FastAPI<br/>Submit · job status · website metadata<br/>llms.txt · download · refresh"]
-        DB[("SQLite<br/>websites · jobs · generations · pages")]
-        Worker["Separate serial worker<br/>Claim jobs · enforce deadline · store results"]
-        Scheduler["Scheduler inside worker<br/>Queue due websites for recrawl"]
-        API <-->|"Queue/read jobs and retrieve output"| DB
-        Worker <-->|"Claim jobs · complete/fail · save output"| DB
-        Worker --> Scheduler
-        Scheduler -->|"Enqueue scheduled jobs"| DB
-    end
-
-    subgraph Phase1["Phase 1 · Shared crawler and generator"]
-        Pipeline["Safe HTTP crawling + sitemap discovery<br/>Extract → rank/select → render → validate"]
-        CLI["Standalone Python CLI"]
-        File["Local llms.txt + stats JSON"]
-        CLI --> Pipeline
-        CLI -->|"Write returned output"| File
-    end
-
-    PublicWeb["Public website<br/>robots.txt · sitemaps · HTML pages"]
-    Browser -->|"Open application"| UI
-    Proxy <-->|"HTTP /api/*"| API
-    Worker <-->|"Run pipeline / receive Markdown and metadata"| Pipeline
-    Pipeline <-->|"Bounded, robots-aware HTTP(S) requests"| PublicWeb
-```
-
-FastAPI queues work and serves persisted results; the separate worker performs
-crawls. SQLite holds both the job queue and generation history. The scheduler
-runs inside the worker, so there is no Redis queue or additional scheduler
-service. Both CLI and worker reuse the same crawl/generation pipeline. The
-browser accesses FastAPI through Next.js, which avoids cross-origin requests.
-Downloading a file does not publish it to the submitted website.
-
-## Phase 4 — Managed deployment (Render)
-
-**Status: not deployed or publicly verified yet.** The deployment target changed
-from an Ubuntu VPS to managed hosting for a short take-home demonstration.
-The original VPS tutorial below remains an alternative. No VPS, SSH access,
-custom domain, Nginx installation, or manual certificate management is needed
-for the Render configuration. Phase 4 must remain incomplete until a real public
-HTTPS deployment passes the checks below.
-
-### Deployment configuration
-
-`render.yaml` defines one Python-native Render web service. Render's native
-runtimes also include Node/npm. `.node-version` selects Node 24 and
-`.python-version` selects Python 3.13; exact patch versions are printed in build
-logs. There is no Docker image or database migration.
-([Render runtimes](https://render.com/docs/native-runtimes))
-
-```text
-Browser → Render HTTPS → Next.js 0.0.0.0:$PORT
-                            → FastAPI 127.0.0.1:8000
-                                     ↕
-                          /var/data/llms.sqlite3
-                                     ↕
-                          one worker + scheduler
-```
-
-The same three existing application processes run inside one service to share
-the persistent disk. `deploy/run.py` starts them, forwards shutdown signals, and
-stops the entire group if any child exits so the platform can restart it.
-The existing worker lock prevents a second worker using the database. Do not
-add a separate Render worker or scale this service to multiple instances.
-
-| Setting | Configured value |
-| --- | --- |
-| Repository | `https://github.com/yejessica/llms-txt-jessica-ye` |
-| Service name | `llms-txt-jessica-ye` (actual public URL assigned by Render) |
-| Runtime / region | Python native / Virginia |
-| Workspace / compute | Hobby / `0.5c-512mb` (formerly Starter), 512 MB |
-| Disk | 1 GB mounted at `/var/data` |
-| API and worker database | `LLMS_DB_PATH=/var/data/llms.sqlite3` |
-| Next.js backend origin | Server-only `BACKEND_URL=http://127.0.0.1:8000` |
-| Build / start | `bash deploy/build.sh` / `python -m deploy.run` |
-| Public health check | `/api/health`, through the existing Next.js proxy |
-| Crawling | 20 pages, depth 2, 180-second job deadline, 1-second request delay |
-| Automatic recrawl | Every 86,400 seconds, inside the sole worker |
-| Submission limit | Shared demo bucket: 6/minute, burst 3; generation and refresh only |
-| Backups | After 30 seconds of uptime, then daily; retain newest 7 snapshots |
-| Auto deploy | Off; manually deploy a tested commit |
-
-The small instance is a starting point for this temporary demonstration, not a
-verified capacity guarantee. Its Node runtime heap is capped at 192 MB; the
-build gets a separate 2 GB heap cap. Monitor Render's memory metrics during real
-crawls. Upgrade compute if memory pressure prevents reliable operation.
-
-The Hobby workspace has no subscription fee. Compute is $7/month plus
-$0.25/month for a 1 GB disk, prorated to the second (roughly $0.24/day before
-taxes, bandwidth, or build overages). Check Render's review screen before
-creating resources. A free service cannot attach a persistent disk and can
-sleep, so this configuration uses paid compute.
-([Pricing](https://render.com/pricing), [billing](https://render.com/docs/faq),
-[free service limitations](https://render.com/docs/free))
-
-### Create the deployment
-
-1. Sign in to Render using a Hobby workspace. Add a payment method when prompted.
-2. Open [Deploy to Render](https://render.com/deploy?repo=https://github.com/yejessica/llms-txt-jessica-ye).
-   This imports the repository's `render.yaml`. Keep the repository root as the
-   service root so both `backend/` and `frontend/` are available.
-3. Review the single service and disk, then create the Blueprint. Do not add
-   Postgres, Redis, a separate worker, or a paid workspace upgrade.
-4. Wait for the build and deployment. The build runs backend and deployment
-   tests, frontend lint/type checking, and the production build. If it fails,
-   inspect Events/build logs before retrying.
-5. Open the assigned `https://...onrender.com` address and run the public checks
-   below. Render supplies HTTP-to-HTTPS redirects and manages TLS renewal.
-   ([TLS documentation](https://render.com/docs/tls))
-
-If configuring manually instead of using the Blueprint, copy the commands,
-environment variables, compute plan, disk, and health path from `render.yaml`.
-Do not use `frontend/` as the root directory or start the development server.
-The persistent disk is available only at runtime; the build never initializes
-the live database.
-
-### Verification record
-
-Local verification on October 15, 2026:
-
-- Existing backend suite: 89 tests and 10 subtests passed (one existing Starlette
-  deprecation warning).
-- Deployment safeguards: 2 tests passed. Submission throttling leaves polling
-  unrestricted; an open WAL database produces a consistent snapshot; isolated
-  recovery verifies rows, stored Markdown hashes, foreign keys, and writes.
-- Frontend lint, type checking, and Node 24 production webpack build passed.
-- All 26 desktop/mobile browser tests passed, including the new HTTP 429 error
-  message. The real local production integration test passed against
-  `example.com`, checking proxy submission, polling, preview, clipboard bytes,
-  download bytes, regeneration, and private-IP rejection.
-- A separate local check of the actual `deploy.run` production launcher passed:
-  real crawl and refresh, proxy health, rate-limited submissions with unrestricted
-  polling, automatic verified backup, mode-0600 database, cleanup after a killed
-  worker, persisted output after a launcher restart, and graceful shutdown.
-  These used temporary storage, Node 24.22.0 and Python 3.13.2 on macOS.
-- Public HTTPS, real deployed crawl, UI copy/download/regeneration, mobile
-  layout, platform restart/persistence, disk permissions, logs, and actual backup
-  output: **pending**. Local checks do not prove the Render service works.
-
-Before declaring deployment complete, record the assigned URL, deployed commit,
-runtime versions, public homepage/health responses and HTTPS redirect, completed
-job ID and metadata for `https://example.com`, preview/copy/download equality,
-regeneration, safe error responses and HTTP 429 behavior, mobile layout, memory
-metrics, logs, backup verification, and persistence after a service restart.
-TLS renewal is platform-managed; distinguish the verified live certificate from
-a future renewal that has not yet occurred.
-
-### Operations, backups, rollback, and teardown
-
-Use the service's Render dashboard:
-
-- **Logs**: combined API, worker, frontend, and supervisor logs. The supervisor
-  labels each child PID; the worker logs completed or failed jobs.
-- **Metrics**: memory/CPU and disk usage; watch for out-of-memory exits.
-- **Manual Deploy → Restart service**: restart all three processes. Afterward,
-  check `/api/health` and retrieve a previously generated file. Interrupted jobs
-  are recovered by the worker's existing recovery path.
-- **Manual Deploy → Deploy a specific commit**: deploy a tested Git revision.
-  Roll back by deploying the previously verified compatible commit. Disk data
-  persists. Do not restore an older database unless data rollback is intended.
-
-In the Render **Shell**, with the service's environment:
-
-```sh
-python deploy/backup.py
-ls -l /var/data /var/data/backups
-python deploy/backup.py --verify /var/data/backups/CHOSEN_SNAPSHOT.sqlite3
-```
-
-Snapshots use Python's SQLite online backup API, convert the snapshot to a
-self-contained rollback-journal file, and check an isolated restored copy before
-publishing the snapshot. Verification never opens the live database for writes.
-The source remains in WAL mode. Generated files have mode 0600 under a private
-umask. This is a database backup, not an off-platform disaster-recovery service.
-Download a chosen snapshot privately before deleting the service/disk. Render's
-disk snapshots are not a substitute for a SQLite-consistent backup.
-
-For a data restore, stop all application processes first. Preserve the existing
-database, WAL, and SHM as a matched set; install a verified snapshot without old
-WAL/SHM files and restart. The supervisor restarts stopped children, so do not
-replace live files in an ordinary Shell session. Use a temporary maintenance
-start command with application children disabled for a controlled restore.
-Rehearse using `--verify` first; no live data restore has been performed.
-
-After the deadline, download anything to retain, then delete this service and
-its disk in Render and check Billing for remaining resources. Merely turning
-off auto-deploy does not stop hosting charges.
-
-### Remaining limitations
-
-- The public deployment has not yet been verified; the 512 MB memory budget is
-  unproven until tested on Render.
-- The limiter is shared across demo visitors, resets on restart, and is not a
-  per-user quota. GET polling, metadata, preview, health, and downloads are not
-  limited. HTTP 429 shows a useful busy message and preserves `Retry-After`.
-- No authentication or ownership isolation; generated website results are
-  accessible by their IDs. Keep this a small temporary review demonstration.
-- Health covers Next.js → API → database, not an independently proven crawl.
-  Supervisor exit monitoring detects a stopped child, not a hung worker.
-- One service and disk mean deployments/restarts have brief downtime. Backups
-  on that disk do not protect against deletion or loss of the hosting account.
-- Crawling remains serial, bounded, and robots-aware. JavaScript-only websites,
-  robots restrictions, and site throttling retain the earlier limitations.
-
-## Phase 3 — Frontend
-
-### Run the frontend locally
-
-Run the backend API and worker in two terminals using the commands in the next
-section. Then, in a third terminal from the repository root:
-
-```sh
-cd frontend
-# Recommended: Node.js 24 LTS; `nvm install && nvm use` uses .nvmrc if you use nvm.
-npm ci
-cp .env.example .env.local  # first run only; preserve any existing custom settings
-npm run dev
-```
-
-Open <http://localhost:3000>. FastAPI runs at <http://localhost:8000>. Next.js
-automatically loads its environment files; the Python API and worker require
-explicit environment loading as documented below. Both Python processes must
-use the same SQLite path, and the worker must remain running.
-
-`frontend/.env.development` provides a local-only default. Override it with
-`frontend/.env.local` or the environment:
-
-```dotenv
-BACKEND_URL=http://127.0.0.1:8000
-```
-
-Set this to the **FastAPI origin**, without `/api`. It is a server-only runtime
-variable; the browser always uses relative `/api/...` requests. Production has
-no hardcoded backend default and requires `BACKEND_URL`. Restart Next.js after
-changing an environment file. The supported toolchain needs Node 20.19+ on the
-20.x line, or Node 22.13+; Node 24 LTS is recommended for a new installation.
-
-To check and run a local production build (this does not deploy anything):
-
-```sh
-cd frontend
-npm run lint
-npm run typecheck
-npm run build
-npm start
-```
-
-`npm run build` uses Next.js's supported webpack compiler. Turbopack remains the
-development default; its production CSS compiler was blocked by the development
-environment's process/port restrictions. No external fonts or network fetches
-are needed during a build.
-
-### Frontend architecture and integration
-
-```text
-frontend/
-├── app/
-│   ├── layout.tsx                 # Metadata and global styles
-│   ├── page.tsx                   # Initial, generating, and results views
-│   ├── globals.css                # Tailwind v4 and responsive component styles
-│   ├── icon.svg                   # Local favicon
-│   └── api/[...path]/route.ts      # Same-origin, allowlisted FastAPI proxy
-├── components/
-│   ├── url-form.tsx               # Validation and submission
-│   ├── generation-status.tsx      # Actual queued/running states
-│   └── llms-preview.tsx           # Raw Markdown, metadata, copy, download, refresh
-├── lib/
-│   ├── api.ts                     # Native fetch, deadlines, and safe errors
-│   ├── types.ts                   # Backend response interfaces
-│   └── use-generation.ts          # Job lifecycle, polling, retry, and recovery
-├── tests/                         # Mocked browser tests and opt-in live integration
-├── playwright.config.ts
-├── playwright.live.config.ts
-├── .env.example
-├── .env.development
-├── .nvmrc
-├── next.config.ts
-├── package.json
-└── package-lock.json
-```
-
-The frontend uses App Router, TypeScript, Tailwind CSS, and Lucide icons, without
-a component library. The proxy keeps browser requests on one origin, so **no
-backend or CORS changes were necessary**. It reads `BACKEND_URL` at request time,
-forwards the backend status/content/download headers, disables caching, and
-applies a 20-second deadline to individual HTTP requests. It never runs a crawl.
-
-1. `POST /api/generate` sends `{ "url": "https://example.com" }` and reads
-   `job_id`, `website_id`, and `status` from the 202 response.
-2. `GET /api/jobs/{job_id}` is polled every two seconds, sequentially, until
-   `completed` or `failed`. Polling stops on unmount and transient failures retry
-   twice before offering **Check job again** for the same job.
-3. After completion, `GET /api/websites/{website_id}` and
-   `GET /api/websites/{website_id}/llms.txt` supply the website metadata and plain
-   text. Counts come from the completed job; the timestamp comes from
-   `latest_generation.generated_at`. An unchanged recrawl preserves the actual
-   stored file's timestamp and shows an up-to-date message.
-4. Copy writes the preview's exact text to the clipboard. If access is denied,
-   the text is selected for manual copying. Download fetches
-   `GET /api/websites/{website_id}/download` and saves a UTF-8 `llms.txt`.
-5. `POST /api/websites/{website_id}/refresh` starts or reuses a job. The old
-   preview remains available during refresh and if refresh fails; successful
-   completion replaces the content and metadata.
-
-The UI validates HTTP(S), credentials, custom ports, and URL length before
-submission. Public DNS and SSRF checks remain authoritative on the backend.
-Buttons and an immediate submission lock prevent repeated requests. Only the
-active job reference and submitted URL are stored in tab-scoped `sessionStorage`,
-so an in-flight job can resume after reload. API errors are translated to safe,
-understandable messages; arbitrary server error bodies are never displayed.
-Empty outputs are rejected, and partial-crawl warnings remain reviewable.
-
-The backend does **not** provide incremental page counts or crawl-stage events.
-The frontend shows honest queued/running indicators, without percentages or
-invented counts. A completed job's page counts are the backend's extracted HTML
-and selected-page totals. Previewed Markdown is rendered as text, not HTML.
-
-### Frontend tests
-
-Verification recorded on October 15, 2026:
-
-| Check | Result |
-| --- | --- |
-| `npm run lint` | Pass; zero warnings |
-| `npm run typecheck` | Pass |
-| `npm run build` | Pass; Next.js 16.4.2, production webpack build |
-| `npm test` | 26 passed in 26.9 seconds; 13 scenarios on desktop and mobile |
-| `npm run test:live` | 1 passed in 11.8 seconds; real example.com crawl and refresh |
-| Backend `.venv/bin/python -m pytest -q` | 89 passed, 10 subtests passed; existing Starlette deprecation warning |
-
-Browser tests use headless **Google Chrome**, which must be installed. They run
-with Playwright for UI testing only; the crawler does not use browser automation.
-
-```sh
-cd frontend
-npm test            # Starts dev server on 127.0.0.1:3100; mocked API responses
-npm run build
-npm run test:live   # Real production server + API + worker + public example.com
-```
-
-The mocked suite runs on desktop (1440px) and mobile (390px) Chromium viewports.
-It covers rendering, validation, pending/running/completed states, duplicate
-submission protection, exact clipboard/download content, changed and unchanged
-regeneration, failed crawls, empty files, service/network errors, timeout error
-responses, failed refreshes/downloads, clipboard denial, warnings, connection
-recovery, and active-job reload recovery. It checks horizontal overflow and
-saves desktop/mobile screenshots. These are **mocked frontend tests**, not public
-crawl tests or native iOS/Safari tests.
-
-The opt-in live suite requires the existing `backend/.venv`, backend dependencies,
-public internet, and local ports 3101/8100. It starts a **production** Next.js
-server and real Uvicorn/worker processes against a temporary SQLite database,
-crawls `example.com` with one-page/depth-zero limits, and verifies submission,
-completion, preview, actual clipboard/download bytes, manual refresh, unchanged
-output, and rejection of a private IP. It cleans up its processes/database and
-does not touch the development database. It does not mock backend responses.
-
-Screenshots are generated locally under the gitignored paths:
-
-- `frontend/test-results/mock/home-desktop.png`
-- `frontend/test-results/mock/home-mobile.png`
-- `frontend/test-results/mock/result-desktop.png`
-- `frontend/test-results/mock/result-mobile.png`
-- `frontend/test-results/live/example-com-result.png`
-
-### Frontend limitations and work before deployment
-
-- Tested in desktop Chrome and mobile Chromium emulation; native Safari/Firefox
-  and physical devices have not been verified. Clipboard API access requires
-  localhost or HTTPS, with a manual-copy fallback.
-- Completed previews are not a saved frontend history. Reload recovery covers
-  in-flight jobs in the same tab; all generated files remain in backend SQLite.
-- Queue status cannot prove worker liveness. Without the separate worker, jobs
-  stay queued. The UI explains this; no new backend health endpoint was added.
-- Crawling remains bounded, serial, and subject to robots rules. JavaScript-only
-  websites and partial crawls have the existing backend limitations below.
-- Before a VPS deployment: configure the runtime `BACKEND_URL`, HTTPS/reverse
-  proxy, service supervision for Next.js/API/worker, a persistent shared SQLite
-  path and backups, and appropriate public access/rate limits. Keep FastAPI
-  reachable privately from Next.js. No authentication, deployment, database
-  changes, or crawler/worker rewrites were added in Phase 3.
-
-## Phase 2 — Backend API, persistence, and automatic refresh
-
-### Run the backend locally
-
-Python 3.11+ on macOS or Ubuntu. From the repository root:
-
-```sh
-cd backend
-python3 -m venv .venv  # skip if the existing environment is already set up
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-cp .env.example .env  # optional; do not overwrite an existing customized .env
-set -a
-source .env
-set +a
-uvicorn app.api.main:app --reload
-```
-
-In a second terminal, from the repository root:
-
-```sh
-cd backend
-source .venv/bin/activate
-set -a
-source .env
-set +a
-python -m app.worker
-```
-
-Environment loading is explicit; `.env` is not automatically read. If you skip
-creating `.env`, skip the `source .env` lines in both terminals. Both processes
-must use the same database path. The default is an absolute path to
-`backend/data/llms.sqlite3`; the example environment uses `./data/llms.sqlite3`
-relative to the process working directory. Tables and WAL mode initialize
-automatically on startup. Database and local environment files are gitignored.
-
-The scheduler runs inside the worker, automatically checking for due websites
-before each job claim. **No separate scheduler process or command is needed.**
-Keep the worker running for both generation and automatic updates. The API alone
-only persists queued jobs. API documentation: <http://127.0.0.1:8000/docs>.
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--max-pages` | 40 | Maximum pages to try fetching (1–1000) |
+| `--max-depth` | 3 | How many links away from the start page to go (0–20) |
+| `--crawl-scope` | `directory` | `directory` = stay in the submitted folder; `site` = whole hostname |
+| `--delay` | 1.0 | Minimum seconds between requests (robots.txt may raise it) |
+| `--output` | auto | Where to write the `.txt`; a `.stats.json` is written beside it |
+| `--verbose` | off | Log every page |
+
+Exit codes: `0` success (a partial crawl that still produced useful output
+counts as success, with a warning), `1` crawl or output failure, `2` invalid
+arguments.
+
+### HTTP API
+
+All endpoints are under `/api`. Locally you can call FastAPI directly on port
+8000; in production, go through the app's public address.
+
+| Method | Endpoint | What it does |
+| --- | --- | --- |
+| POST | `/api/generate` | Body `{"url": "..."}`. Queues a crawl and returns `202` with `job_id`, `website_id`, `status` |
+| GET | `/api/jobs/{job_id}` | Job status, timestamps, page counts, warnings, error, `output_changed` |
+| GET | `/api/websites/{website_id}` | Website info and latest generation metadata |
+| GET | `/api/websites/{website_id}/llms.txt` | Latest `llms.txt` as plain text |
+| GET | `/api/websites/{website_id}/download` | Same, as a file download |
+| POST | `/api/websites/{website_id}/refresh` | Queue a fresh crawl (`202`) |
+| GET | `/api/websites/{website_id}/generations` | List of all saved versions, newest first |
+| GET | `/api/websites/{website_id}/generations/{generation_id}` | One older version as plain text |
+| GET | `/api/health` | `{"status":"ok"}` if the API and database are reachable |
 
 ```sh
 curl -X POST http://127.0.0.1:8000/api/generate \
   -H 'Content-Type: application/json' -d '{"url":"https://example.com"}'
-# Copy job_id and website_id from the response into the commands below.
+# copy job_id and website_id from the response:
 curl http://127.0.0.1:8000/api/jobs/JOB_ID
-curl http://127.0.0.1:8000/api/websites/WEBSITE_ID
 curl http://127.0.0.1:8000/api/websites/WEBSITE_ID/llms.txt
-curl -OJ http://127.0.0.1:8000/api/websites/WEBSITE_ID/download
-curl -X POST http://127.0.0.1:8000/api/websites/WEBSITE_ID/refresh
-curl http://127.0.0.1:8000/api/websites/WEBSITE_ID/generations
 ```
 
-### API contract
+Errors always look like `{"error": {"code": "...", "message": "..."}}`. Common
+statuses: `404` not found or not ready yet, `422` invalid or unsafe URL, `429`
+too many submissions (production only), `503` database unavailable. If you
+submit a URL that is already being crawled, you get the existing job back
+instead of a duplicate.
 
-| Method | Endpoint | Behavior |
+---
+
+## Configuration
+
+### Backend (`backend/.env`, used by the API and the worker)
+
+All times are in seconds. The local `.env` file isn't loaded automatically,
+which is why the commands above run `set -a; source .env; set +a`.
+
+| Variable | Default | What it controls |
 | --- | --- | --- |
-| POST | `/api/generate` | Validate public URL, persist website/job, return HTTP 202 with `job_id`, `website_id`, `status` |
-| GET | `/api/jobs/{job_id}` | Job type/status, UTC timestamps, counts, error, warnings, `output_changed` |
-| GET | `/api/websites/{website_id}` | Original/normalized URL, title, status, timestamps, latest generation metadata |
-| GET | `/api/websites/{website_id}/llms.txt` | Latest Markdown as UTF-8 plain text |
-| GET | `/api/websites/{website_id}/download` | Same content with `Content-Disposition: attachment; filename="llms.txt"` |
-| POST | `/api/websites/{website_id}/refresh` | Queue a manual recrawl; HTTP 202 |
-| GET | `/api/websites/{website_id}/generations` | Generation metadata, newest first; prior Markdown remains in SQLite |
-| GET | `/api/health` | Basic API/database health: `{"status":"ok"}` |
+| `LLMS_DB_PATH` | `backend/data/llms.sqlite3` | The SQLite database file. API and worker must match. |
+| `LLMS_CHECK_INTERVAL` | `86400` (1 day) | Time between automatic re-crawls of a site |
+| `LLMS_POLL_INTERVAL` | `2` | How often an idle worker checks for new jobs |
+| `LLMS_JOB_TIMEOUT` | `300` | Maximum time for one whole crawl |
+| `LLMS_MAX_PAGES` | `40` | Maximum pages to fetch per crawl (1–1000) |
+| `LLMS_MAX_DEPTH` | `3` | Maximum link distance from the start page (0–20) |
+| `LLMS_REQUEST_TIMEOUT` | `15` | Timeout for a single network request |
+| `LLMS_REQUEST_DELAY` | `1` | Minimum gap between requests to the same site |
+| `LLMS_CRAWL_SCOPE` | `directory` | `directory` or `site` (see CLI `--crawl-scope`) |
+| `LLMS_SUBMISSIONS_PER_MINUTE` | `6` | *Production only* (`deploy/api.py`): shared rate limit for generate/refresh |
+| `LLMS_SUBMISSION_BURST` | `3` | *Production only*: how many submissions can arrive at once before limiting starts |
 
-Errors consistently use `{"error":{"code":"...","message":"..."}}`.
-Missing resources or a file that is not ready return 404; invalid input or unsafe
-URLs return 422; database unavailability returns 503; unexpected API failures
-return a generic 500. Detailed exceptions are logged on the server, without
-tracebacks in API responses. A crawl failure is recorded on the job, not returned
-as an HTTP failure from the original submission.
+Other crawler limits (response size, number of sitemaps, retry rules, user agent)
+are in `backend/app/config.py`.
 
-Submitting an already active normalized URL or refreshing an active website
-returns the existing job rather than adding a duplicate. Submitting a completed
-website queues a new user-requested job. User-requested jobs (including manual
-refreshes) use `job_type: "initial"`; automatic checks use `"scheduled"`.
+### Frontend (`frontend/.env.local`)
 
-### Persistence and processing
-
-The minimal schema lives in `app/database.py` and uses built-in `sqlite3`:
-
-| Table | Stored data |
-| --- | --- |
-| `websites` | ID, original and unique normalized URL, title, creation/last crawl/last stored generation/next check timestamps, status |
-| `jobs` | ID, website FK, type/status, creation/start/completion timestamps, safe error, extracted/selected page counts, warnings, whether output changed |
-| `generations` | ID, website FK, complete Markdown, SHA-256, timestamp, latest flag |
-| `pages` | Website FK and URL, title, description, SHA-256 of extracted metadata/text/links, last observed timestamp |
-
-Write transitions use short `BEGIN IMMEDIATE` transactions, foreign keys, a
-10-second SQLite busy timeout, and WAL mode. Unique partial indexes enforce one
-active job per website, one running job globally, and one latest file per website.
-Generation insertion, page metadata, website state, and job completion commit
-atomically. Historical Markdown is retained. A failed refresh leaves the last
-successful file downloadable.
-
-The API never crawls. `app/generation.py` shares the existing
-`Crawler(CrawlConfig).crawl` → `select_pages` → `render` → `validate` sequence
-with the CLI. The crawler, ranking rules, redirects, IP pinning, and robots policy
-are unchanged. Submission performs initial URL/DNS validation; execution checks
-DNS again and validates every redirect, preventing rebinding from bypassing the
-fetcher's public-IP checks. Submission waits for DNS validation, not the crawl.
-
-`python -m app.worker` exclusively locks a sibling `.worker.lock` file for its
-lifetime and claims jobs atomically. A second worker for the same local database
-exits with a clear error. At startup, while holding this lock, it requeues stale
-running jobs from an interrupted process. An interrupted crawl may be retried;
-committed generations are protected by atomic completion and hash comparison.
-SIGINT/SIGTERM stop the worker and leave an interrupted claim for restart recovery.
-The single main-thread worker uses Unix signals for the whole-job deadline;
-macOS/Linux are supported. Individual crawl failures are recorded and the worker
-continues; temporary persistence failures cause a logged recovery/retry loop.
-
-Once a website has a generation, it is automatically recrawled when due. Each
-check runs a bounded full crawl; it is not an incremental crawler. A different
-Markdown SHA-256 creates a new generation and moves the latest flag. Identical
-output completes the job with `output_changed: false` and updates `last_crawl_at`
-and `next_check_at`, without creating a version. `last_successful_generation_at`
-changes only when a new version is stored. Body-only changes can update page
-hashes without changing the rendered file. Previously observed page records are
-retained; their observation timestamps identify the last time each was seen.
-
-The next check is scheduled from completion (including failure), avoiding hot
-retry loops. Due checks also queue on worker startup after downtime. Failed
-initial submissions without a stored generation require a manual retry; failed
-refreshes of previously generated sites remain eligible for automatic checks.
-
-### Configuration
-
-All intervals and timeouts are seconds. Copy `backend/.env.example` to `.env`
-and load it into both processes, or export variables directly.
-
-| Variable | Default | Purpose |
+| Variable | Example | What it controls |
 | --- | --- | --- |
-| `LLMS_DB_PATH` | `backend/data/llms.sqlite3` (absolute default) | Shared SQLite file |
-| `LLMS_CHECK_INTERVAL` | `86400` | Time between checks; set to `10` for a local demo (minimum 1) |
-| `LLMS_POLL_INTERVAL` | `2` | Idle queue/scheduler polling interval (minimum 0.05) |
-| `LLMS_JOB_TIMEOUT` | `300` | Whole crawl/generation deadline |
-| `LLMS_MAX_PAGES` | `40` | Attempted pages, range 1–1,000 |
-| `LLMS_MAX_DEPTH` | `3` | Discovery depth, range 0–20 |
-| `LLMS_REQUEST_TIMEOUT` | `15` | Per-network-operation timeout |
-| `LLMS_REQUEST_DELAY` | `1` | Minimum request interval; robots policy may increase it |
+| `BACKEND_URL` | `http://127.0.0.1:8000` | Where the Next.js proxy forwards `/api/*`. **No `/api` on the end.** Read only on the server, never in the browser. Required in production. |
 
-The existing `CrawlConfig` still supplies response-size, sitemap, discovery,
-retry, and user-agent limits. CLI flags continue to configure standalone CLI
-crawls; backend environment variables configure worker crawls.
+Restart the program after changing any environment file.
 
-### Phase 2 verification and limitations
+---
+
+## Testing
 
 ```sh
-cd backend
-source .venv/bin/activate
+# Backend: about 120 offline tests; they never touch the real internet
+cd backend && source .venv/bin/activate
 python -m pytest -q
-python tests/run_backend_live.py  # optional; requires public internet and local sockets
+
+# Deployment helpers (run from the repository root)
+backend/.venv/bin/python -m pytest deploy/test_deployment.py -q
+
+# Frontend: code style, type checks, production build
+cd frontend
+npm run lint
+npm run typecheck
+npm run build
+
+# Frontend browser tests with a fake API (needs Google Chrome installed)
+npm test
+
+# Optional end-to-end test: real API + worker + example.com (needs internet)
+npm run build && npm run test:live
 ```
 
-The offline suite uses temporary SQLite files and mocked HTTP/crawler results.
-It covers creation/status, success/failure, persistence, concurrent submission
-and claiming, active-job uniqueness, multiple websites, manual refreshes,
-scheduling, output/page hash changes, unchanged output, atomic rollback, worker
-locking, shutdown/restart recovery, deadlines, downloads, and URL validation.
-The installed Starlette version emits one non-failing TestClient/httpx
-deprecation warning; no additional HTTP client dependency is needed at runtime.
-
-The optional live test starts real API/worker subprocesses against an isolated
-temporary SQLite database, checks `example.com` with one-page/depth-zero limits,
-downloads its output, refreshes it, observes an automatic check, and restarts the
-API to verify persistence. It cleans up its processes/database. The recorded run
-passed in **10.82 seconds**, with three completed jobs and **one generation**.
-Logs, JSON results, and the generated file are saved under gitignored
-`backend/output/phase2-*`. Changes to a real website were not simulated; changed
-output is covered by deterministic offline tests.
-
-Backend operational limits:
-
-- One local worker and SQLite file on macOS/Linux; no Windows or shared/network
-  filesystem support. Scheduling waits for an active crawl to finish, and queued
-  jobs may take longer than the configured check interval to start.
-- Health reports API/database availability, not worker liveness or queue latency.
-- Bounded full recrawls, no conditional HTTP/incremental fetching. Page hashes
-  are observational metadata; the Markdown hash controls version creation.
-- As in Phase 1, useful partial crawls can complete with warnings. Temporary page
-  failures may produce a smaller new file; clients should inspect job warnings.
-- No retention/pagination, schema migration framework, or dependency lockfile yet.
-  These are follow-ups if history or the schema grows.
-- No authentication or per-client abuse controls. Decide access and quotas before
-  exposing a public service. The Phase 3 proxy handles browser origin integration;
-  no deployment has been performed.
-
-## Phase 1 — Crawler and CLI
-
-### Standalone CLI
-
-Python 3.11+ on macOS or Ubuntu:
+Optional live backend checks (these need internet access):
 
 ```sh
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m app.cli generate https://example.com
+cd backend && source .venv/bin/activate
+python tests/run_backend_live.py   # API + worker against example.com, incl. restart
+python tests/run_live.py           # real CLI against the 12-site benchmark
+python -m app.benchmark --only example --only python-docs
 ```
 
-The repository itself is the project root; it is not nested inside another
-`llms-txt-generator` directory. Run the CLI from `backend` so `app` is importable.
+The [coverage benchmark](backend/benchmarks/README.md) measures how well the
+crawler finds the key pages of 12 real sites. The latest results are in
+[`results-2026-10-16.md`](backend/benchmarks/results-2026-10-16.md).
 
-```sh
-python -m app.cli generate https://docs.python.org/3/ \
-  --max-pages 30 \
-  --max-depth 3 \
-  --output ./output/python-llms.txt \
-  --verbose
+---
+
+## Deploy to Render
+
+[Render](https://render.com/) runs the whole app as **one web service** with a
+**persistent disk** for the SQLite file. The configuration is already in
+`render.yaml`, so you don't need a server, Docker, or SSL certificates of your own.
+
+### What gets deployed
+
+```mermaid
+flowchart TB
+    Internet(["🌐 Visitors"]) -->|"HTTPS (certificate managed by Render)"| Edge["Render load balancer<br/>https://&lt;name&gt;.onrender.com"]
+
+    subgraph Service["One Render web service · 512 MB RAM"]
+        Sup["<b>deploy/run.py</b><br/>supervisor: starts, watches,<br/>and stops the three children"]
+        FE["Next.js<br/>0.0.0.0:$PORT<br/>(public)"]
+        API["FastAPI + rate limit<br/>127.0.0.1:8000<br/>(private)"]
+        W["Worker + scheduler"]
+        Sup -.starts.-> FE
+        Sup -.starts.-> API
+        Sup -.starts.-> W
+        Sup -.daily.-> Bk["Backup"]
+        FE -->|"/api/* proxy"| API
+    end
+
+    subgraph Disk["Persistent disk · 1 GB · /var/data"]
+        DB[("llms.sqlite3")]
+        BK[("backups/<br/>newest 7 kept")]
+    end
+
+    Edge --> FE
+    API <--> DB
+    W <--> DB
+    Bk --> BK
+    W -->|"crawls"| Web(["Public websites"])
 ```
 
-Default limits: 40 attempted pages, depth 3, 25 selected pages, one concurrent
-request, 1-second minimum interval, 15-second per-operation timeout, 2 MB per
-response, 12 sitemap documents, and 5,000 discovered URLs. CLI ranges are 1–1,000
-pages and depth 0–20. Other settings live in `app/config.py` and can be supplied
-through `CrawlConfig` when importing the crawler. Use `--delay 2` to request a
-slower two-second interval. The request interval increases
-to respect robots.txt crawl delay/request rate. An attempt can fail or return a
-non-HTML document, so extracted page counts can be lower than the page limit.
-
-Outputs include Markdown and a neighboring `.stats.json` file with actual counts,
-request totals, errors, and elapsed time. Exit codes: 0 success, 1 crawl or output
-failure, 2 invalid command arguments. A useful output from a partial crawl still
-returns 0, with `status: "partial"` and a warning; complete crawls report
-`status: "complete"`. Neither status proves selection quality. Failed page requests do not abort a crawl;
-no accessible HTML pages is an error. Verbose mode logs individual page progress.
-
-### Tests
-
-```sh
-cd backend
-source .venv/bin/activate
-python -m pytest -q
-python tests/run_live.py
-```
-
-The Phase 1 tests use `unittest.TestCase`, which pytest discovers normally. Those
-tests also run via `python -m unittest discover -s tests -v`; run pytest for the
-complete Phase 1 and Phase 2 suite. Unit tests use in-memory HTTP fixtures and
-never contact public sites. The Phase 1 tests cover URL security,
-normalization, sitemaps, BFS, deduplication, extraction, ranking, rendering,
-validation, CLI output, errors, limits, and redirects. The live runner invokes the
-real CLI on five websites with 30-page limits, retaining logs and JSON outcomes.
-A successful live runner process only means attempts were recorded; inspect each
-row's exit code and manually review generated Markdown before assigning Pass.
-
-### How it works
-
-1. **Safe fetching:** normalize HTTP(S) URLs, reject credentials and nonstandard
-   ports, resolve every new connection, and reject any DNS answer set containing
-   a non-public IP. Requests connect to the checked IP directly while retaining
-   the hostname for Host, TLS verification, and SNI. Environment proxies are not
-   used. Redirects are manual, limited, scoped, and checked against robots rules.
-   Responses are bounded and cached within a crawl to avoid fetching redirect
-   targets twice. Canonical metadata cannot initiate an unsafe request.
-2. **Sitemaps:** fetch origin robots.txt, read declared same-origin sitemaps, and
-   check `/sitemap.xml`. Parse namespaced URL sets and nested indexes, preserve
-   `lastmod` hints, filter scope, and bound sitemap traversal. XML entity/DOCTYPE
-   declarations are rejected. Robots permission is checked for sitemap fetches.
-3. **BFS:** crawl the submitted page and its internal links breadth first using
-   pending/visited sets. When the linked frontier is exhausted, remaining sitemap
-   URLs supplement discovery as depth-one seeds. Depth zero never uses seeds.
-   Depth is discovery distance, not path segment count; a sitemap seed's true
-   link distance is unknown. Discovered includes eligible links found beyond the
-   crawl depth, and may include robots-blocked pages; only fetched HTML is output.
-4. **Extraction:** BeautifulSoup extracts titles, meta descriptions, headings,
-   scoped links, and navigation links. Trafilatura extracts primary text. Cleaned
-   BeautifulSoup text is the fallback if Trafilatura finds no content; if the
-   package is missing entirely, the CLI warns and uses this degraded mode.
-   Descriptions use extracted metadata or a visible paragraph, shortened without
-   paraphrasing. Canonicals are preferred only if the canonical page was actually
-   fetched within scope and its extracted content is identical. Empty client-side
-   shells are reported rather than populated with invented descriptions.
-5. **Ranking:** score pages using discovery depth, incoming/nav link frequency,
-   title/description availability, content length, overview/documentation hints,
-   and the starting page. Select up to 25 pages by round-robin across URL sections,
-   then group them into readable Markdown sections. Scoring and selection are
-   separate from crawling and can be replaced later.
-6. **Rendering:** emit one H1, an optional grounded summary blockquote, and H2
-   file lists with escaped Markdown labels and descriptions. The validator checks
-   exact deterministic rendering, H1 structure, URL validity, uniqueness, and
-   membership/metadata consistency against fetched pages.
-
-The renderer follows the [llms.txt format](https://llmstxt.org/#format): only H1 is
-required; summaries and H2 file lists are optional. This is validation of the
-emitted subset, not a general Markdown parser or proof that a website's metadata
-is truthful. Links use fetched HTML URLs; Markdown variants are never guessed.
-
-The reusable entry point is `Crawler(CrawlConfig(...)).crawl(url)`. It returns
-extracted pages, link signals, counts, and errors without writing files. Ranking,
-rendering, and validation are independent Python functions, shared through
-`app/generation.py`. The CLI writes local artifacts; the worker stores outputs
-in SQLite.
-
-### Engineering trade-offs and limits
-
-- Serial requests keep politeness, ordering, and failure handling simple. A large
-  site can take minutes; CLI timeouts apply to individual network operations.
-  The Phase 2 worker additionally imposes a whole-job deadline.
-- Scope is the exact hostname and effective origin, permitting HTTP to HTTPS
-  upgrades. `www` aliases, subdomains, and cross-origin sitemap hosting are not
-  followed automatically. Submit the final public hostname.
-- Missing robots.txt (404/410) allows crawling; other errors fail closed. The
-  crawler never bypasses denied rules. Robots rules and delays are a site policy,
-  not authorization to access authenticated content.
-- Directory trailing slashes are preserved because `/docs/` and `/docs` can have
-  different relative-link semantics. Repeated slashes and fragments normalize;
-  redirect caching removes server-declared aliases. Other distinct URLs with
-  identical content are not merged without a verified canonical.
-- Query-bearing discovered links, common auth/search/cart routes, pagination, and
-  non-HTML asset extensions are filtered conservatively. This loses some useful
-  query-based pages. Ranking is heuristic and not semantically aware.
-- No JavaScript execution, browser automation, compressed sitemap files, general retries,
-  persistent cache, incremental updates, or LLM summaries. Thin server HTML can
-  produce thin output even when a browser shows substantial content.
-- Real-world selection still needs review. The Python snapshot includes many
-  alternate documentation versions, and Paul Graham includes both root and
-  index.html. Dependency ranges are constrained but not a reproducible lockfile.
-
-Phases 1–3 are implemented. Development stops after the frontend; VPS deployment
-is a separate phase.
-
-On HTTP 429 the fetcher reads Retry-After (seconds or HTTP date), waits and retries
-once when the requested wait is at most 30 seconds (five seconds without a valid
-header), and raises its subsequent interval to at least two seconds. A longer
-wait or a second 429 stops the crawl without making requests to other pages.
-Already extracted pages can still generate a partial file. No 429 is cached.
-If sitemap discovery or robots.txt is rate-limited before page extraction, the
-CLI fails rather than continuing against the throttled site. Wait until the
-site's requested cooldown expires before starting another run.
-
-## Deployment guide — Single Ubuntu VPS
-
-**Status: tutorial only; deployment has not been executed.** This is a planned
-follow-up to Phases 1–3. Run these commands on your VPS, not on your development
-computer. The example uses Ubuntu 24.04 LTS, systemd, Nginx, and one domain.
-Shell examples were syntax-checked, and the backup script was tested against a
-temporary live WAL database. Nginx, systemd, and certificate issuance have not
-been exercised on a VPS by this project yet.
-
-### 1. Choose a server and prepare DNS
-
-- Start with one Linux VPS with persistent local SSD storage. As an initial
-  sizing estimate, 2 vCPUs and 4 GB RAM leave room to build Next.js on the server;
-  this is not a measured production capacity guarantee. Monitor actual usage.
-- Create an Ubuntu 24.04 LTS server and log in over SSH using a non-root account
-  with `sudo`. Keep your SSH key available and follow your provider's SSH setup.
-- Create a DNS **A** record for a hostname such as `llms.example.com`, pointing
-  to the VPS's public IPv4 address. Only add an **AAAA** record if the server's
-  IPv6 routing/firewall is configured too.
-- Replace `YOUR_REPOSITORY_URL`, `YOUR_TESTED_COMMIT`, and `llms.example.com`
-  throughout this tutorial. Push the completed project to the repository first;
-  uncommitted local files are not included in a server-side Git clone. Use a
-  read-only deploy key for a private repository, without embedding credentials
-  in URLs or config files.
-
-The deployed request path is:
-
-```text
-Internet → HTTPS Nginx :443 → Next.js 127.0.0.1:3000
-                                  → FastAPI 127.0.0.1:8000 → SQLite
-                                                            ↕
-                                                  worker + scheduler
-```
-
-All browser traffic, **including `/api/*`**, goes to Next.js. Its existing proxy
-forwards requests to FastAPI. Keep ports 3000 and 8000 private. Next.js recommends
-placing a reverse proxy in front of a self-hosted Node server.
-([Next.js self-hosting guide](https://nextjs.org/docs/app/guides/self-hosting))
-
-### 2. Install system dependencies and create an application user
-
-On the VPS:
-
-```sh
-sudo apt update
-sudo apt install -y git curl ca-certificates xz-utils python3 python3-venv python3-pip nginx sqlite3 ufw snapd cron
-sudo useradd --system --create-home --home-dir /opt/llms-txt --shell /usr/sbin/nologin llms
-sudo install -d -o llms -g llms -m 0755 /opt/llms-txt
-sudo install -d -o llms -g llms -m 0700 /var/lib/llms-txt /var/backups/llms-txt
-sudo install -d -m 0750 /etc/llms-txt
-```
-
-Install **Node.js 24 LTS and npm system-wide** from the official Linux binary
-distribution, matching your VPS architecture and checking its published checksum:
-
-```sh
-(
-set -eu
-node_install_dir="$(mktemp -d /tmp/llms-node.XXXXXX)"
-cd "$node_install_dir"
-case "$(uname -m)" in
-  x86_64) node_arch=x64 ;;
-  aarch64|arm64) node_arch=arm64 ;;
-  *) printf 'Use the official Node installer for this CPU architecture.\n'; exit 1 ;;
-esac
-curl -fsSLO https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt
-node_archive="$(awk -v suffix="-linux-${node_arch}.tar.xz" 'substr($2, length($2)-length(suffix)+1) == suffix { print $2 }' SHASUMS256.txt)"
-test -n "$node_archive"
-curl -fsSLO "https://nodejs.org/dist/latest-v24.x/$node_archive"
-awk -v name="$node_archive" '$2 == name' SHASUMS256.txt | sha256sum -c -
-sudo tar -xJf "$node_archive" -C /usr/local --strip-components=1 --no-same-owner
-)
-hash -r
-```
-
-Run the lines in order and stop if downloading or checksum verification fails.
-This installs the current Node 24 patch under `/usr/local`; for production
-reproducibility, record the downloaded version and checksum with your release.
-See the [official Node.js downloads](https://nodejs.org/en/download). Do not use
-Ubuntu 24.04's older default Node package or a Node installation available only
-inside your personal nvm shell. The service below assumes `/usr/local/bin/node`;
-if using another system-wide installer, update that service path accordingly.
-
-```sh
-node --version
-npm --version
-python3 --version
-command -v node
-sudo -u llms /usr/local/bin/node --version
-```
-
-The last command must work with the **same Node path used in the service**.
-`npm` must also be on the PATH used by the build commands below. Node 24 and
-Python 3.12 from Ubuntu 24.04 satisfy this project's runtime requirements.
-
-### 3. Clone a tested revision, install dependencies, and build
-
-```sh
-sudo -u llms -H git clone YOUR_REPOSITORY_URL /opt/llms-txt/app
-sudo -u llms git -C /opt/llms-txt/app checkout --detach YOUR_TESTED_COMMIT
-sudo -u llms python3 -m venv /opt/llms-txt/app/backend/.venv
-sudo -u llms /opt/llms-txt/app/backend/.venv/bin/python -m pip install -r /opt/llms-txt/app/backend/requirements.txt
-
-sudo -u llms -H sh -c 'cd /opt/llms-txt/app/backend && .venv/bin/python -m pytest -q'
-sudo -u llms -H sh -c 'cd /opt/llms-txt/app/frontend && npm ci --include=dev && npm run lint && npm run build'
-```
-
-Stop if any check fails. Keep `frontend/node_modules` and `.next` on the server;
-this repository uses a normal Next.js Node server, not a static export or a
-standalone bundle. Do not copy a macOS virtual environment or `node_modules` to
-Linux. Install dependencies on the target OS. No Chrome installation is needed
-to run the application; Chrome is only needed for the optional browser tests.
-
-Python dependencies currently use version ranges rather than a committed lock.
-Record the installed versions alongside the commit for rollback:
-
-```sh
-sudo -u llms -H sh -c 'cd /opt/llms-txt/app && backend/.venv/bin/python -m pip freeze > /var/backups/llms-txt/python-$(git rev-parse --short HEAD).txt'
-```
-
-### 4. Configure persistent production environment files
-
-Use `sudoedit /etc/llms-txt/backend.env` to create:
-
-```dotenv
-LLMS_DB_PATH=/var/lib/llms-txt/llms.sqlite3
-LLMS_CHECK_INTERVAL=86400
-LLMS_POLL_INTERVAL=2
-LLMS_JOB_TIMEOUT=300
-LLMS_MAX_PAGES=40
-LLMS_MAX_DEPTH=3
-LLMS_REQUEST_TIMEOUT=15
-LLMS_REQUEST_DELAY=1
-PYTHONUNBUFFERED=1
-```
-
-Create `/etc/llms-txt/frontend.env` with `sudoedit`:
-
-```dotenv
-NODE_ENV=production
-BACKEND_URL=http://127.0.0.1:8000
-```
-
-```sh
-sudo chown root:root /etc/llms-txt/backend.env /etc/llms-txt/frontend.env
-sudo chmod 0600 /etc/llms-txt/backend.env /etc/llms-txt/frontend.env
-```
-
-systemd reads these files before starting each service; use plain `KEY=value`
-lines, without `export`. Both Python services must load the **same backend env**.
-The absolute database path keeps data outside the Git checkout so application
-updates do not replace it. The `llms` user needs write access to its directory
-for SQLite WAL/SHM files and the worker lock. Keep this on a local filesystem,
-not NFS or a shared network volume. There is no need for a production
-`frontend/.env.local`; `BACKEND_URL` is read from the service environment at
-runtime. No CORS configuration or public backend hostname is needed.
-
-### 5. Supervise all three processes with systemd
-
-Create the following files with `sudoedit`. Do not use `--reload`, `next dev`,
-multiple worker services, or a separate scheduler in production.
-
-`/etc/systemd/system/llms-api.service`:
-
-```ini
-[Unit]
-Description=llms.txt FastAPI API
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-Type=simple
-User=llms
-Group=llms
-WorkingDirectory=/opt/llms-txt/app/backend
-EnvironmentFile=/etc/llms-txt/backend.env
-ExecStart=/opt/llms-txt/app/backend/.venv/bin/python -m uvicorn app.api.main:app --host 127.0.0.1 --port 8000 --workers 1
-Restart=on-failure
-RestartSec=5
-TimeoutStopSec=30
-UMask=0077
-NoNewPrivileges=true
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-```
-
-`/etc/systemd/system/llms-worker.service`:
-
-```ini
-[Unit]
-Description=llms.txt crawler worker and recrawl scheduler
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-Type=simple
-User=llms
-Group=llms
-WorkingDirectory=/opt/llms-txt/app/backend
-EnvironmentFile=/etc/llms-txt/backend.env
-ExecStart=/opt/llms-txt/app/backend/.venv/bin/python -m app.worker
-Restart=on-failure
-RestartSec=5
-TimeoutStopSec=30
-UMask=0077
-NoNewPrivileges=true
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-```
-
-`/etc/systemd/system/llms-frontend.service`:
-
-```ini
-[Unit]
-Description=llms.txt Next.js frontend and API proxy
-Wants=network-online.target
-After=network-online.target llms-api.service
-
-[Service]
-Type=simple
-User=llms
-Group=llms
-WorkingDirectory=/opt/llms-txt/app/frontend
-EnvironmentFile=/etc/llms-txt/frontend.env
-ExecStart=/usr/local/bin/node /opt/llms-txt/app/frontend/node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000
-Restart=on-failure
-RestartSec=5
-TimeoutStopSec=30
-UMask=0077
-NoNewPrivileges=true
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-```
-
-This starts the same Next.js production server as `npm start`, invoking Node
-directly so systemd supervises the actual server process. Adjust the Node path
-if required by step 2. Start and check the services:
-
-```sh
-sudo systemd-analyze verify /etc/systemd/system/llms-api.service /etc/systemd/system/llms-worker.service /etc/systemd/system/llms-frontend.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now llms-api llms-worker llms-frontend
-sudo systemctl status llms-api llms-worker llms-frontend --no-pager
-curl --fail http://127.0.0.1:8000/api/health
-curl --fail http://127.0.0.1:3000/api/health
-```
-
-Both health requests should return `{"status":"ok"}`. API and worker initialize
-the database automatically; retry after a few seconds if startup is still in
-progress. An interrupted running job is recovered when the
-sole worker restarts. Health checks cover API/database availability, **not worker
-liveness**; generation in step 8 verifies the complete flow.
-
-### 6. Put Nginx in front of Next.js
-
-Create `/etc/nginx/conf.d/llms-limits.conf`:
-
-```nginx
-limit_req_zone $binary_remote_addr zone=llms_submissions:10m rate=6r/m;
-```
-
-On Ubuntu this file is included inside Nginx's `http` block. Create
-`/etc/nginx/snippets/llms-proxy.conf`:
-
-```nginx
-proxy_pass http://127.0.0.1:3000;
-proxy_http_version 1.1;
-proxy_set_header Host $host;
-proxy_set_header X-Real-IP $remote_addr;
-proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-proxy_set_header X-Forwarded-Proto $scheme;
-proxy_set_header Connection "";
-proxy_connect_timeout 5s;
-proxy_read_timeout 30s;
-proxy_buffering off;
-proxy_cache off;
-```
-
-Create `/etc/nginx/sites-available/llms-txt`, replacing the hostname:
-
-```nginx
-server {
-    listen 80;
-    listen [::]:80;
-    server_name llms.example.com;
-    client_max_body_size 16k;
-    limit_req_status 429;
-
-    location ~ ^/api/(generate|websites/[^/]+/refresh)/?$ {
-        limit_req zone=llms_submissions burst=2 nodelay;
-        include /etc/nginx/snippets/llms-proxy.conf;
-    }
-
-    location / {
-        include /etc/nginx/snippets/llms-proxy.conf;
-    }
-}
-```
-
-```sh
-sudo ln -s /etc/nginx/sites-available/llms-txt /etc/nginx/sites-enabled/llms-txt
-sudo nginx -t
-sudo systemctl enable --now nginx
-sudo systemctl reload nginx
-```
-
-Create the symlink only once. On an existing server, preserve other sites and
-check for a conflicting `server_name` before enabling this block. Do not add a
-`location /api` that forwards directly to port 8000: that would bypass the
-frontend proxy. The sample limits generation/refresh requests per client IP;
-job polling every two seconds is left unrestricted. These are starting limits,
-not comprehensive abuse protection. Nginx documents its per-key request limits
-in the [request limiting module](https://nginx.org/en/docs/http/ngx_http_limit_req_module.html).
-
-Crawls run in the worker, so an HTTP connection does not need to stay open for
-the entire crawl. The Nginx 30-second timeout exceeds the existing Next.js proxy's
-20-second per-request deadline; job status is fetched separately. If using a
-CDN, do not cache `/api/*`, and configure trusted real-IP handling before relying
-on per-client rate limits. This example assumes Nginx receives client traffic
-directly, without a CDN.
-
-### 7. Configure the firewall and HTTPS
-
-Allow SSH **before** enabling the firewall. If your SSH port is not 22, allow
-that actual port instead of relying on the `OpenSSH` profile. Keep a second SSH
-session or your provider's console available while changing firewall rules.
-
-```sh
-sudo ufw allow OpenSSH
-sudo ufw allow 'Nginx Full'
-sudo ufw enable
-sudo ufw status
-```
-
-Also allow SSH and ports 80/443 in the VPS provider's network firewall. Do not
-allow inbound 3000/8000. The worker needs outbound public DNS and HTTP/HTTPS for
-crawling; do not block that egress. See Ubuntu's
-[firewall guide](https://ubuntu.com/server/docs/how-to/security/firewalls/).
-
-Once DNS resolves to the VPS and HTTP port 80 is reachable, obtain a certificate:
-
-```sh
-sudo snap install --classic certbot
-sudo /snap/bin/certbot --nginx --redirect -d llms.example.com
-sudo nginx -t
-sudo systemctl status snap.certbot.renew.timer --no-pager
-sudo /snap/bin/certbot renew --dry-run
-```
-
-Use one Certbot installation method; do not install competing apt and snap
-versions. Certbot updates the matching Nginx site for TLS and HTTP-to-HTTPS
-redirects. Keep port 80 open for HTTP-01 certificate renewal. See the official
-[Ubuntu HTTPS instructions](https://ubuntu.com/server/docs/how-to/security/obtain-tls-certificates/).
-
-### 8. Verify the deployed application
-
-```sh
-curl --fail https://llms.example.com/api/health
-curl --head https://llms.example.com
-sudo ss -ltnp
-sudo journalctl -u llms-api -u llms-worker -u llms-frontend -n 100 --no-pager
-```
-
-Confirm 3000/8000 listen only on `127.0.0.1`, then open
-`https://llms.example.com` in a browser. Generate `https://example.com`, observe
-completion, inspect the preview and counts, copy and download the file, and
-regenerate it. Test from a mobile viewport too. Check the worker log for the
-completed job; a healthy API with permanently queued jobs is not a successful
-deployment. Verify services remain enabled after a planned reboot.
-
-The app does not upload a generated file to its source website. Download
-`llms.txt` and place it at that website's root yourself. This application has no
-authentication, job-ownership checks, or global queue quotas. IDs are not an
-access-control boundary. Keep a take-home demo restricted to intended reviewers
-using your hosting access controls if needed; per-IP rate limits alone do not
-make an unrestricted public crawler suitable for arbitrary traffic.
-
-### 9. Back up SQLite and test recovery
-
-Use SQLite's online backup operation, not a plain copy of a running WAL-mode
-database. Committed data can still reside in `-wal`. The backup API creates a
-consistent snapshot while API/worker connections remain active.
-([SQLite backup documentation](https://www.sqlite.org/backup.html))
-
-Create `/usr/local/bin/llms-txt-backup` with `sudoedit`:
-
-```sh
-#!/bin/sh
-set -eu
-umask 077
-snapshot="/var/backups/llms-txt/llms-$(date -u +%Y%m%dT%H%M%SZ).sqlite3"
-sqlite3 -readonly -cmd '.timeout 10000' /var/lib/llms-txt/llms.sqlite3 ".backup '$snapshot'"
-test "$(sqlite3 "$snapshot" 'PRAGMA journal_mode=DELETE;')" = delete
-test "$(sqlite3 -readonly "$snapshot" 'PRAGMA integrity_check;')" = ok
-printf '%s\n' "$snapshot"
-```
-
-```sh
-sudo chmod 0755 /usr/local/bin/llms-txt-backup
-sudo -u llms /usr/local/bin/llms-txt-backup
-sudo systemctl enable --now cron
-sudo crontab -u llms -e
-```
-
-Add a nightly schedule to that user's crontab (03:00 in the server's timezone):
-
-```cron
-0 3 * * * /usr/local/bin/llms-txt-backup >> /var/backups/llms-txt/backup.log 2>&1
-```
-
-The script makes each snapshot self-contained in rollback-journal mode before
-checking it; the live source database remains in WAL mode. Copy snapshots to
-private off-VPS storage; a backup on the same disk does not
-protect against losing the VPS. Retain a defined set of daily/weekly copies and
-monitor backup failures/disk usage. Also retain the deployed Git commit, the
-Python package snapshot, `/etc/llms-txt/`, Nginx config, and systemd unit files in
-private backup storage. Do not commit environment files or backups to Git.
-
-For a restore, first validate the chosen snapshot and **stop all three services**.
-Replace `CHOSEN_SNAPSHOT.sqlite3` with the actual backup filename:
-
-```sh
-sudo sqlite3 -readonly /var/backups/llms-txt/CHOSEN_SNAPSHOT.sqlite3 'PRAGMA integrity_check;'
-sudo systemctl stop llms-frontend llms-worker llms-api
-recovery_dir="/var/lib/llms-txt/pre-restore-$(date -u +%Y%m%dT%H%M%SZ)"
-sudo install -d -o llms -g llms -m 0700 "$recovery_dir"
-for suffix in '' '-wal' '-shm'; do
-  if sudo test -e "/var/lib/llms-txt/llms.sqlite3$suffix"; then
-    sudo mv "/var/lib/llms-txt/llms.sqlite3$suffix" "$recovery_dir/"
-  fi
-done
-sudo install -o llms -g llms -m 0600 /var/backups/llms-txt/CHOSEN_SNAPSHOT.sqlite3 /var/lib/llms-txt/llms.sqlite3
-sudo systemctl start llms-api llms-worker llms-frontend
-```
-
-Proceed only if integrity check returned `ok` and all services actually stopped.
-Do not mix the restored database with old WAL/SHM files or delete the worker
-lock to bypass a running worker. Restoring reverts data to the snapshot time;
-retain the moved files for recovery. Recheck health and a stored download after
-restoration, and rehearse the process on a separate test database before relying
-on backups.
-
-### 10. Updates, rollback, and troubleshooting
-
-This simple update procedure has **planned downtime**; do not run `next build`
-over a `.next` directory used by a live server. Record the current Git commit
-and installed Python versions, take a verified backup, and then:
-
-```sh
-sudo systemctl stop llms-frontend llms-worker llms-api
-sudo -u llms git -C /opt/llms-txt/app fetch origin
-sudo -u llms git -C /opt/llms-txt/app checkout --detach YOUR_NEW_TESTED_COMMIT
-sudo -u llms /opt/llms-txt/app/backend/.venv/bin/python -m pip install -r /opt/llms-txt/app/backend/requirements.txt
-sudo -u llms -H sh -c 'cd /opt/llms-txt/app/backend && .venv/bin/python -m pytest -q'
-sudo -u llms -H sh -c 'cd /opt/llms-txt/app/frontend && npm ci --include=dev && npm run lint && npm run build'
-sudo systemctl start llms-api llms-worker llms-frontend
-```
-
-Stop on any failed command; do not start an incomplete build. If unit files
-changed, run `sudo systemctl daemon-reload` before starting services. Environment
-file edits require restarting the affected services. Repeat step 8 after each
-update. No database schema migration framework is implemented; review any future
-schema change and its recovery plan before applying it.
-
-For an application rollback, stop the services, check out the previously
-recorded commit, reinstall frontend dependencies with `npm ci`, restore the
-matching Python dependency snapshot (prefer a fresh virtual environment), rerun
-tests/build, and restart. Keep the persistent database if the older code is
-compatible; restore a database backup only when necessary, understanding that
-newer jobs/generations would be lost. This tutorial does not claim zero-downtime
-or automatic rollback.
-
-| Symptom | Check or action |
+**Why everything runs in one service:** a Render disk can only be attached to
+one service, and the API and worker must share the SQLite file. `deploy/run.py`
+starts all three programs inside that single service. If any of them crashes,
+it stops the rest so Render restarts the whole service cleanly.
+**Don't add a separate worker service or scale to more than one instance.**
+
+| Setting (from `render.yaml`) | Value |
 | --- | --- |
-| Nginx returns 502 | Check `systemctl status llms-frontend` and its journal; verify port 3000 and successful `.next` build. |
-| UI cannot reach generation service | Check `/etc/llms-txt/frontend.env`, restart the frontend, and curl both loopback health endpoints. |
-| Jobs remain pending | Check the worker service/logs and matching `LLMS_DB_PATH`; API health alone cannot detect this. |
-| Worker reports another worker | Stop the stray process using the same database; do not remove its lock file to force concurrency. |
-| SQLite permission/read-only errors | Check ownership of `/var/lib/llms-txt` and its files, free space, and that API/worker run as `llms`. |
-| Build is killed or fails from memory pressure | Check RAM/swap and build logs; build on a larger machine or compatible Linux CI if necessary. |
-| Node executable missing in systemd | Use the actual system-wide Node path; service processes do not initialize your nvm shell. |
-| Nginx returns 429 | Submission/refresh rate limit was exceeded; wait, inspect access logs, and tune limits for the intended audience. |
-| HTTPS issuance/renewal fails | Check A/AAAA records, public port 80, matching `server_name`, Certbot logs, and renewal timer. |
-| Crawl fails for one website | Inspect safe job errors and worker logs; robots rules, DNS, timeouts, or JavaScript-only HTML can prevent useful output. |
+| Runtime / region | Python (Node is also available) / Virginia |
+| Instance plan | `0.5c-512mb` (512 MB RAM) |
+| Disk | 1 GB at `/var/data` |
+| Build command | `bash deploy/build.sh`: installs dependencies, runs **all tests**, builds the frontend |
+| Start command | `python -m deploy.run` |
+| Health check | `/api/health` |
+| Crawl limits | 20 pages, depth 2, 180 s per job, 1 s between requests |
+| Re-crawl | Every 24 hours |
+| Submission limit | 6 per minute shared across all visitors, bursts of up to 3 |
+| Backups | 30 s after start, then daily; newest 7 kept |
+| Auto-deploy | Off (you choose when to deploy) |
 
-For ongoing operation, monitor the three services, public health, successful job
-completion/queue age, disk/database growth, backup success, certificate renewal,
-and memory. Systemd captures application logs in the journal; Nginx logs are
-under `/var/log/nginx/`. No frontend analytics, authentication, new database,
-or deployment automation has been added by this tutorial.
+**Cost:** about **$7/month** for compute plus **$0.25/month** for the 1 GB
+disk, charged by the second (around $0.24/day). The free plan can't be used,
+because it doesn't support persistent disks. Check
+[Render pricing](https://render.com/pricing) before creating anything.
+
+### Step-by-step
+
+1. **Put the code on GitHub.** Fork this repository (or push your copy to your
+   own GitHub repository). Render deploys from GitHub.
+2. **Create a Render account** at <https://dashboard.render.com/> (the free
+   "Hobby" workspace is fine) and add a payment method when asked.
+3. **Create the Blueprint.** In the dashboard choose **New → Blueprint**, connect
+   GitHub, and pick your repository. For the original repo you can use
+   [this one-click link](https://render.com/deploy?repo=https://github.com/yejessica/llms-txt-jessica-ye).
+   Render reads `render.yaml`. Keep the **repository root** as the root
+   directory, not `frontend/`.
+4. **Review and confirm.** You should see exactly **one web service and one
+   disk**. Don't add Postgres, Redis, or a worker.
+5. **Wait for the build** (several minutes). If it fails, open the service's
+   **Events → build logs**. The build runs the full test suite, so a failing
+   test stops the deploy on purpose.
+6. **Open your app** at the `https://<name>.onrender.com` address Render gives you.
+
+### Check that it works
+
+- [ ] `https://<your-app>/api/health` returns `{"status":"ok"}`
+- [ ] `http://<your-app>` redirects to `https://`
+- [ ] Generating `https://example.com` completes, and the preview, copy,
+      download, and regenerate all work
+- [ ] The page looks right on a phone-sized screen
+- [ ] After **Manual Deploy → Restart service**, the earlier result is still there
+- [ ] Logs show `Verified backup: /var/data/backups/...`
+- [ ] Memory under **Metrics** stays well below 512 MB during a crawl
+
+Because auto-deploy is off, deploy updates yourself: push to GitHub, then
+choose **Manual Deploy → Deploy latest commit**, or deploy a specific commit.
+
+### Prefer your own server?
+
+[`docs/deploy-vps.md`](docs/deploy-vps.md) is a full tutorial for one Ubuntu
+24.04 server with systemd, Nginx, Let's Encrypt HTTPS, a firewall, and cron
+backups. The same three programs run there, with Nginx in front:
+
+```mermaid
+flowchart LR
+    I(["Internet"]) -->|":443 HTTPS"| N["Nginx<br/>TLS + rate limit"]
+    N --> FE["Next.js<br/>127.0.0.1:3000"]
+    FE -->|"/api/*"| API["FastAPI<br/>127.0.0.1:8000"]
+    API <--> DB[("/var/lib/llms-txt/<br/>llms.sqlite3")]
+    W["Worker<br/>(systemd)"] <--> DB
+```
+
+---
+
+## Operations: logs, backups, rollback
+
+All of this happens in the Render dashboard for your service.
+
+| Task | How |
+| --- | --- |
+| **Read logs** | **Logs** tab. Lines from the API, worker, frontend, and supervisor are combined; the worker logs every finished or failed job. |
+| **Watch resources** | **Metrics** tab: memory, CPU, and disk. Out-of-memory crashes show up here. |
+| **Restart** | **Manual Deploy → Restart service**. Interrupted jobs are re-queued automatically. |
+| **Roll back code** | **Manual Deploy → Deploy a specific commit**, and pick the last good one. Data on the disk is kept. |
+| **Shut down** | Download any backups you want to keep, then **delete the service and its disk**, then check **Billing**. Turning off auto-deploy doesn't stop charges. |
+
+**Backups.** Run these in the service's **Shell** tab:
+
+```sh
+python deploy/backup.py                    # make a backup now
+ls -l /var/data/backups                    # list backups
+python deploy/backup.py --verify /var/data/backups/CHOSEN_SNAPSHOT.sqlite3
+```
+
+Backups use SQLite's online backup feature, so they are consistent even while
+the app is running, and each one is test-restored before it is kept. They live on
+the **same disk** as the database, so they don't protect against deleting the
+service. Download important ones elsewhere.
+
+**Restoring a backup** means replacing the live database, and that is only safe
+while every program is stopped. The supervisor restarts programs automatically,
+so don't swap files from a normal Shell session. Instead, temporarily change the
+start command so nothing runs, move the old `llms.sqlite3`, `-wal`, and `-shm`
+files aside together, copy in a verified snapshot, then restore the start
+command. Rehearse with `--verify` first.
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause and fix |
+| --- | --- |
+| Job stays **pending** forever | The worker isn't running, or it uses a different `LLMS_DB_PATH` than the API. Start it, and load the same `.env` in both terminals. |
+| `Another worker is already using this database` | A second worker is running. Stop it. Never delete the lock file to force it. |
+| App says it can't reach the generation service | Terminal 1 (API) isn't running, or `BACKEND_URL` in `frontend/.env.local` is wrong (it must not end in `/api`). |
+| `uvicorn: command not found` / `No module named app` | The virtual environment isn't active (`source .venv/bin/activate`), or you aren't in `backend/`. |
+| `Too many requests` / HTTP 429 | The production submission limit was hit. Wait a minute. |
+| The result has few or no pages | The site may build its pages with JavaScript (unsupported), block crawlers in `robots.txt`, or rate-limit requests. Check the job's warnings. |
+| Render build fails | A test failed or a dependency didn't install. Read the build log in **Events**. |
+| Render service keeps restarting | Probably out of memory. Check **Metrics**, lower `LLMS_MAX_PAGES`, or upgrade the plan. |
+
+---
+
+## Limitations
+
+- **No JavaScript rendering.** Sites that only show content after JavaScript
+  runs produce thin output.
+- **Ranking is rule-based.** It doesn't understand page meaning, so selections
+  can miss important pages. The [benchmark](backend/benchmarks/README.md)
+  measures this.
+- **One crawl at a time.** Crawling is deliberately serial and polite, so large
+  sites take minutes and jobs wait in line.
+- **Exact hostname only.** `www.` versions, subdomains, and URLs with query
+  strings aren't followed. Submit the site's final public address.
+- **No user accounts.** Anyone with a result's ID can view it. The rate limit is
+  shared by all visitors and resets on restart. This setup is meant for a small
+  demo, not a public service.
+- **Health check scope.** `/api/health` confirms the frontend, API, and database
+  are reachable. It doesn't confirm the worker is crawling.
+- **SQLite on one machine.** No Windows, network drives, or multiple instances.
+  Deploys and restarts cause a short downtime.
+- **Unpinned Python dependencies.** `requirements.txt` uses version ranges, not
+  a lockfile. Run `pip freeze` after a working deploy if you need an exact record.
+
+---
+
+## Project status
+
+| Area | Status |
+| --- | --- |
+| Crawler + CLI | Complete |
+| API, database, worker, automatic re-crawls | Complete |
+| Web frontend, URL shortcuts, version history | Complete |
+| Render configuration | Prepared and tested locally with the real production launcher. **A public Render deployment hasn't been verified yet.** |
+| Ubuntu VPS guide | Written; not yet run on a real server |
+
+Local verification as of October 2026: the backend tests, the deployment tests,
+the frontend lint, type check, and build, the mocked browser tests on desktop
+and mobile, and a live end-to-end `example.com` run (generate, download,
+refresh, automatic re-crawl, unchanged-output detection, and persistence across
+restarts) all pass.
