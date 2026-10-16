@@ -4,10 +4,11 @@ import logging
 import time
 from urllib.parse import urlsplit, urlunsplit
 from urllib.robotparser import RobotFileParser
-from .urls import normalize_url, public_addresses, in_scope, relevant
+from .urls import normalize_url, public_addresses, in_crawl_scope, relevant
 from .fetcher import Fetcher, RateLimitError
 from .sitemap import discover
 from .extractor import extract
+from .dedup import deduplicate
 from ..config import CrawlConfig
 
 log=logging.getLogger(__name__)
@@ -23,6 +24,7 @@ class CrawlResult:
     blocked: int = 0
     requests: int = 0
     elapsed: float = 0
+    duplicates_removed: int = 0
 
 class Crawler:
     def __init__(self, config=None, fetcher=None):
@@ -33,6 +35,7 @@ class Crawler:
         started=time.monotonic(); start=normalize_url(url)
         if self.fetcher is None: public_addresses(start)
         result=CrawlResult(start)
+        page_allowed=lambda u: in_crawl_scope(u,start,self.config.crawl_scope)
         fetcher=self.fetcher or Fetcher(self.config,start)
         parser=RobotFileParser(); robots_text=""
         p=urlsplit(start); robots_url=urlunsplit((p.scheme,p.netloc,"/robots.txt","",""))
@@ -73,14 +76,18 @@ class Crawler:
                 result.attempted+=1
                 try:
                     # Check robots permission on every redirect as well.
-                    response=fetcher.get(current,allowed=lambda u: in_scope(u,start) and can_fetch(u))
+                    response=fetcher.get(current,allowed=lambda u: page_allowed(u) and can_fetch(u))
                     response.raise_for_status()
                     final=normalize_url(str(response.url))
+                    if not page_allowed(final) or not can_fetch(final):
+                        raise ValueError("Page redirect outside crawl scope or robots permission")
                     if final in fetched: continue
                     fetched.add(final)
                     visited.add(final)
                     if "text/html" not in response.headers.get("content-type","").lower() and "application/xhtml+xml" not in response.headers.get("content-type","").lower(): continue
                     page=extract(response.text,final,depth,start)
+                    page.links=[link for link in page.links if page_allowed(link)]
+                    page.nav_links=[link for link in page.nav_links if page_allowed(link)]
                     if not page.content:
                         result.errors.append(f"Page {final}: no extractable text (possibly JavaScript-only)")
                         continue
@@ -98,8 +105,9 @@ class Crawler:
                     break
                 except Exception as exc:
                     result.errors.append(f"Page {current}: {exc}"); log.warning("%s",result.errors[-1])
-            by_url={page.url:page for page in result.pages}
-            result.pages=[page for page in result.pages if not (page.canonical and page.canonical!=page.url and page.canonical in by_url and page.content==by_url[page.canonical].content)]
+            unique=deduplicate(result.pages,start)
+            result.duplicates_removed=len(result.pages)-len(unique)
+            result.pages=unique
             result.requests=fetcher.requests
             result.elapsed=time.monotonic()-started
             return result

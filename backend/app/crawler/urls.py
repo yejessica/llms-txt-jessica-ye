@@ -1,7 +1,8 @@
 import ipaddress
 import re
 import socket
-from urllib.parse import urljoin, urlsplit, urlunsplit, quote
+import posixpath
+from urllib.parse import urljoin, urlsplit, urlunsplit, quote, unquote
 
 class UnsafeURL(ValueError):
     pass
@@ -41,7 +42,25 @@ def public_addresses(url: str) -> list[str]:
         raise UnsafeURL("Destination resolves to a non-public IP")
     return addresses
 
-SKIP = re.compile(r"(?:^|/)(?:login|logout|signin|signup|search|admin|cart|checkout|wp-admin)(?:/|$)|\.(?:pdf|zip|gz|png|jpg|jpeg|gif|svg|webp|mp4|css|js|xml|txt|ico|woff2?)$", re.I)
+def in_crawl_scope(url: str, start: str, scope: str = "directory") -> bool:
+    """Keep pages in the submitted directory, or optionally the whole origin.
+
+    Trailing slashes and extensionless URLs denote directories; filenames use
+    their containing directory. Decode and normalize before checking boundaries.
+    Robots and sitemap documents themselves still use origin-level scope.
+    """
+    if not in_scope(url, start):
+        return False
+    if scope == "site":
+        return True
+    original_path = unquote(urlsplit(start).path)
+    path = posixpath.normpath(original_path)
+    if not original_path.endswith("/") and "." in path.rsplit("/", 1)[-1]:
+        path = posixpath.dirname(path)
+    candidate = posixpath.normpath(unquote(urlsplit(url).path))
+    return candidate == path or candidate.startswith(path.rstrip("/") + "/")
+
+SKIP = re.compile(r"(?:^|/)(?:login|logout|signin|signup|search|admin|cart|checkout|wp-admin)(?:/|$)|\.(?:pdf|zip|gz|bz2|xz|tar|tgz|tbz2|7z|epub|png|jpg|jpeg|gif|svg|webp|mp4|css|js|xml|txt|ico|woff2?)$", re.I)
 def relevant(url: str) -> bool:
     p=urlsplit(url)
     artifact = re.search(r"/(?:tarball|checksum)/?$", p.path, re.I)
