@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, ArrowUpRight, FileCode2, FileText, Globe2, ScanLine, Sparkles } from "lucide-react";
+import { AlertCircle, ArrowUpRight, FileCode2, FileText, Globe2, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { GenerationStatus } from "@/components/generation-status";
 import { LlmsPreview } from "@/components/llms-preview";
@@ -26,9 +26,7 @@ export function Generator({ initialUrl, initialJobId, initialVersion }: { initia
 
       <main id="main" className="main-content">
         <div className={`hero ${initial ? "" : "hero-compact"}`}>
-          <span className="eyebrow"><Sparkles size={14} aria-hidden="true" /> A LITTLE STRUCTURE GOES A LONG WAY</span>
-          <h1>Make your website easier<br className="desktop-break" /> <span>for AI to understand.</span></h1>
-          <p className="hero-description">Automatically discover your website’s most important pages<br className="desktop-break" /> and generate a structured <code>llms.txt</code> file.</p>
+          <h1>Automatically discover your website’s most important pages<br className="desktop-break" /> and generate a structured <code>llms.txt</code> file.</h1>
         </div>
 
         <div className="workspace">
@@ -44,13 +42,13 @@ export function Generator({ initialUrl, initialJobId, initialVersion }: { initia
         </div>
 
         {initial && <section className="how-section" aria-labelledby="how-title" id="how-it-works">
-          <div className="section-label"><span /><h2 id="how-title">FROM URL TO USEFUL, IN THREE STEPS</h2><span /></div>
+          <div className="section-label"><span /><h2 id="how-title">Generate <code>llms.txt</code> file in 3 steps</h2><span /></div>
           <div className="how-grid">{steps.map((step, index) => <article key={step.title} className="how-step">
             <div className="how-icon"><step.icon size={21} strokeWidth={1.6} aria-hidden="true" /><span>0{index + 1}</span></div>
             <h3>{step.title}</h3><p>{step.description}</p>
           </article>)}</div>
           <p className="format-note"><FileCode2 size={16} aria-hidden="true" /><span><code>llms.txt</code> is a Markdown overview of your website, designed to help AI tools find useful content.</span></p>
-          <p className="format-note"><Globe2 size={16} aria-hidden="true" /><span>Try the URL shortcut: append <code>/example.com</code> to this site’s address to start generating automatically.</span></p>
+          <p className="format-note"><Globe2 size={16} aria-hidden="true" /><span>Try the URL shortcut: add <code>llms-txt-jessica-ye.onrender.com/</code> before any public website’s address to generate its <code>llms.txt</code> automatically. Example: <code>llms-txt-jessica-ye.onrender.com/example.com</code></span></p>
         </section>}
       </main>
 

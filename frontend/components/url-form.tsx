@@ -40,7 +40,7 @@ export function UrlForm({ initialUrl = "", busy, hasResult, onSubmit }: UrlFormP
         </button>
       </div>
       {error && <p id="url-error" className="field-error" role="alert">{error}</p>}
-      <p id="url-hint" className="form-hint"><ShieldCheck size={14} aria-hidden="true" /> Public websites only. We respect robots.txt and crawl limits.</p>
+      <p id="url-hint" className="form-hint"><ShieldCheck size={14} aria-hidden="true" /> Public websites only.</p>
     </form>
   );
 }

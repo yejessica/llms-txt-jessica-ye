@@ -52,7 +52,7 @@ test("homepage renders responsively and provides an accessible form", async ({ p
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Make your website easier for AI to understand.");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Automatically discover your website’s most important pages and generate a structured llms.txt file.");
   await expect(page.getByRole("button", { name: "Generate llms.txt", exact: true })).toBeEnabled();
   await expect(page.getByRole("heading", { name: "Start with your URL" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

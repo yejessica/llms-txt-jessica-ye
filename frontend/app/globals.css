@@ -37,14 +37,11 @@ button:focus-visible, a:focus-visible, summary:focus-visible, pre:focus-visible 
 .header-link:hover { color: var(--accent); }
 .main-content { flex: 1; width: 100%; padding-bottom: 58px; }
 .hero { text-align: center; padding: 73px 0 37px; }
-.eyebrow { display: inline-flex; align-items: center; gap: 8px; color: var(--accent); font-size: 10px; font-weight: 600; letter-spacing: 1.8px; }
-.hero h1 { font-size: clamp(36px, 4.7vw, 56px); font-weight: 500; line-height: 1.13; letter-spacing: -2.5px; margin: 25px 0 20px; }
-.hero h1 span { color: #747e72; }
-.hero-description { color: #6d756e; line-height: 1.8; font-size: 15px; margin: 0; }
+.hero h1 { font-size: clamp(26px, 3vw, 36px); font-weight: 500; line-height: 1.35; letter-spacing: -1px; margin: 0; }
 code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
-.hero-description code { color: #4f5f51; font-size: .88em; background: #edf0e9; border: 1px solid #e3e8de; border-radius: 4px; padding: 2px 4px; }
+.hero h1 code { color: #4f5f51; font-size: .88em; background: #edf0e9; border: 1px solid #e3e8de; border-radius: 4px; padding: 2px 4px; }
 .hero-compact { padding-top: 46px; padding-bottom: 28px; }
-.hero-compact h1 { font-size: 40px; letter-spacing: -1.8px; margin: 18px 0 14px; }
+.hero-compact h1 { font-size: 26px; letter-spacing: -.7px; }
 .workspace { max-width: 790px; margin: 0 auto; }
 .url-form { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; box-shadow: 0 3px 4px #253a2303, 0 8px 24px #253a2303; }
 .form-label { display: block; font-weight: 600; font-size: 12px; margin-bottom: 12px; }
@@ -67,16 +64,16 @@ code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
 .how-section { max-width: 862px; margin: 57px auto 0; }
 .section-label { display: flex; align-items: center; gap: 18px; }
 .section-label span { flex: 1; height: 1px; background: var(--border); }
-.section-label h2 { font-size: 9px; font-weight: 500; letter-spacing: 1.5px; color: #82897e; white-space: nowrap; }
+.section-label h2 { font-size: 13px; font-weight: 500; letter-spacing: .2px; color: #82897e; white-space: nowrap; }
 .how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 44px; margin-top: 31px; }
 .how-icon { display: flex; align-items: center; justify-content: space-between; color: #66795c; margin-bottom: 18px; }
 .how-icon > svg { box-sizing: content-box; padding: 10px; background: #eff2e9; border-radius: 9px; }
 .how-icon span { font-family: "SFMono-Regular", Consolas, monospace; color: #b1b8aa; font-size: 11px; }
 .how-step h3 { font-size: 13px; font-weight: 600; letter-spacing: -.1px; margin: 0 0 9px; }
 .how-step p { color: #7a8176; font-size: 11px; line-height: 1.85; margin: 0; }
-.format-note { margin: 39px 0 0; padding: 17px 20px; border: 1px solid #e5e9df; border-radius: 7px; background: #f4f6ef; color: #7b8474; font-size: 10px; line-height: 1.8; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.format-note { margin: 39px 0 0; padding: 17px 20px; border: 1px solid #e5e9df; border-radius: 7px; background: #f4f6ef; color: #7b8474; font-size: 13px; line-height: 1.7; display: flex; align-items: center; justify-content: center; gap: 10px; }
 .format-note svg { flex-shrink: 0; color: #77866c; }
-.format-note code { color: #5a6c51; }
+.format-note code { color: #5a6c51; overflow-wrap: anywhere; }
 .site-footer { border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 25px 0 28px; color: #8a9086; font-size: 10px; }
 .footer-detail { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
 .small-dot { width: 5px; height: 5px; background: #8da47a; border-radius: 50%; }
@@ -148,10 +145,9 @@ code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
   .site-shell { padding: 0 24px; }
   .site-header { height: 82px; }
   .hero { padding-top: 55px; padding-bottom: 29px; }
-  .hero h1 { font-size: 42px; letter-spacing: -1.9px; }
+  .hero h1 { font-size: 26px; letter-spacing: -.7px; }
   .hero-compact { padding-top: 34px; }
-  .hero-compact h1 { font-size: 34px; }
-  .hero-description { font-size: 13px; }
+  .hero-compact h1 { font-size: 22px; }
   .url-form { padding: 20px; }
   .how-grid { gap: 27px; }
   .how-step p { font-size: 11px; }
@@ -163,11 +159,9 @@ code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
   .brand-mark { width: 30px; height: 34px; }
   .header-link { font-size: 10px; }
   .hero { padding-top: 43px; }
-  .eyebrow { font-size: 8px; letter-spacing: 1.1px; gap: 6px; }
-  .hero h1 { font-size: 36px; line-height: 1.14; letter-spacing: -1.6px; margin: 22px 0 17px; }
-  .hero-compact h1 { font-size: 29px; letter-spacing: -1px; }
+  .hero h1 { font-size: 22px; line-height: 1.4; letter-spacing: -.4px; padding: 0 5px; }
+  .hero-compact h1 { font-size: 19px; }
   .desktop-break { display: none; }
-  .hero-description { font-size: 12px; line-height: 1.85; padding: 0 5px; }
   .form-row { flex-direction: column; gap: 11px; }
   .url-form { padding: 19px; }
   .input-wrap input { padding: 16px 0; font-size: 16px; }
@@ -175,7 +169,7 @@ code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
   .form-hint { align-items: flex-start; font-size: 9px; gap: 5px; }
   .form-hint svg { margin-top: 1px; }
   .section-label { gap: 10px; }
-  .section-label h2 { letter-spacing: .9px; font-size: 8px; }
+  .section-label h2 { letter-spacing: 0; font-size: 12px; }
   .how-grid { grid-template-columns: 1fr; gap: 25px; padding: 0 9px; margin-top: 27px; }
   .how-step { position: relative; padding-left: 58px; }
   .how-icon { margin: 0; }
@@ -183,7 +177,7 @@ code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
   .how-icon span { position: absolute; right: 0; top: 2px; font-size: 9px; }
   .how-step h3 { font-size: 12px; margin: 2px 20px 7px 0; }
   .how-step p { font-size: 11px; line-height: 1.8; }
-  .format-note { margin-top: 29px; padding: 13px; font-size: 9px; align-items: flex-start; }
+  .format-note { margin-top: 29px; padding: 13px; font-size: 12px; align-items: flex-start; }
   .format-note svg { margin-top: 2px; }
   .site-footer { font-size: 9px; gap: 16px; padding: 22px 0; }
   .site-footer > span:first-child { max-width: 160px; line-height: 1.8; }

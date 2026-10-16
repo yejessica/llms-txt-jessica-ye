@@ -9,5 +9,5 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { themeColor: "#fafaf8" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><body suppressHydrationWarning>{children}</body></html>;
 }
