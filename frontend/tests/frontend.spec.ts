@@ -283,18 +283,35 @@ for (const [shortcut, target] of [
   ["/http://example.com/docs/", "http://example.com/docs/"],
   ["/example.com/docs/a%2Fb%3Fc%25?x=a%2Fb&url=another&job=target-job", "https://example.com/docs/a%2Fb%3Fc%25?x=a%2Fb&url=another&job=target-job"],
 ]) {
-  test(`URL shortcut ${shortcut} starts generation automatically`, async ({ page }) => {
+  test(`URL shortcut ${shortcut} starts generation automatically`, async ({ page, baseURL }) => {
     const calls = await mockApi(page, { url: target });
     await page.goto(shortcut);
     await expect(page.getByLabel("llms.txt Markdown preview")).toHaveText(markdown);
     await expect(page.getByLabel("Generate for another website")).toHaveValue(target);
     const location = new URL(page.url());
+    expect(location.origin).toBe(new URL(baseURL!).origin);
     expect(location.pathname).toBe("/");
     expect(location.searchParams.get("url")).toBe(target);
     expect(location.searchParams.get("job")).toBe("job-1");
     expect(calls.generate).toBe(1);
   });
 }
+
+test("shortcut redirects stay relative behind a reverse proxy", async ({ request }) => {
+  for (const forwardedHost of ["llms-txt-jessica-ye.onrender.com", "untrusted.example.com"]) {
+    const response = await request.get("/example.com/docs/?version=2", {
+      maxRedirects: 0,
+      headers: {
+        Host: "0.0.0.0:10000",
+        "X-Forwarded-Host": forwardedHost,
+        "X-Forwarded-Proto": "https",
+      },
+    });
+    expect(response.status()).toBe(307);
+    expect(response.headers().location).toBe("/?url=https%3A%2F%2Fexample.com%2Fdocs%2F%3Fversion%3D2");
+    expect(response.headers()["cache-control"]).toBe("no-store");
+  }
+});
 
 test("shortcut jobs resume while running and reopen after completion without submitting again", async ({ page }) => {
   const calls = await mockApi(page, { statuses: ["pending", "completed"] });

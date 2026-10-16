@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 export function GET(request: NextRequest) {
   const path = request.nextUrl.pathname.slice(1);
@@ -12,9 +12,13 @@ export function GET(request: NextRequest) {
   const target = /^https?:\//i.test(path)
     ? path.replace(/^(https?):\/+/i, "$1://")
     : /^[a-z][a-z\d+.-]*:\//i.test(path) ? path : `https://${path}`;
-  const destination = new URL("/", request.url);
   // Keep the raw escaped path and query; decoding path segments would turn
   // encoded slashes, question marks, or percent signs into different URLs.
-  destination.searchParams.set("url", target + request.nextUrl.search);
-  return NextResponse.redirect(destination, { status: 307, headers: { "Cache-Control": "no-store" } });
+  const query = new URLSearchParams({ url: target + request.nextUrl.search });
+  // A relative Location keeps the browser on its public origin. Behind Render's
+  // reverse proxy, request.url can contain the internal 0.0.0.0:10000 address.
+  return new Response(null, {
+    status: 307,
+    headers: { Location: `/?${query}`, "Cache-Control": "no-store" },
+  });
 }
