@@ -88,6 +88,10 @@ def create_app(settings=None):
     def generations(website_id: str):
         return database.generations(website_id)
 
+    @app.get("/api/websites/{website_id}/generations/{generation_id}", response_class=PlainTextResponse)
+    def generation(website_id: str, generation_id: str):
+        return PlainTextResponse(database.generation(website_id, generation_id)['markdown'])
+
     @app.get("/api/health")
     def health():
         database.health()

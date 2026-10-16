@@ -1,4 +1,4 @@
-import type { Job, JobCreated, Website } from "./types";
+import type { GenerationInfo, Job, JobCreated, Website } from "./types";
 
 export class ApiError extends Error {
   constructor(message: string, public status = 0) {
@@ -74,6 +74,9 @@ export const api = {
   markdown: (id: string, signal?: AbortSignal) => request<string>(`${sitePath(id)}/llms.txt`, { signal }, true),
   refresh: (id: string, signal?: AbortSignal) => request<JobCreated>(`${sitePath(id)}/refresh`, { method: "POST", signal }),
   download: (id: string) => request<string>(`${sitePath(id)}/download`, {}, true),
+  generations: (id: string, signal?: AbortSignal) => request<GenerationInfo[]>(`${sitePath(id)}/generations`, { signal }),
+  version: (id: string, generationId: string, signal?: AbortSignal) =>
+    request<string>(`${sitePath(id)}/generations/${encodeURIComponent(generationId)}`, { signal }, true),
 };
 
 export function errorMessage(error: unknown): string {

@@ -172,6 +172,23 @@ def test_manual_refresh_versions_and_identical_output(client, db, settings):
     assert sum(item['is_latest'] for item in history) == 1
     with db.connection() as conn:
         assert conn.execute('SELECT markdown FROM generations WHERE generation_id=?', (first_file['generation_id'],)).fetchone()[0] == first_file['markdown']
+    previous = client.get(f"{website_url}/generations/{first_file['generation_id']}")
+    assert previous.status_code == 200
+    assert previous.headers['content-type'].startswith('text/plain')
+    assert previous.text == first_file['markdown']
+    assert previous.text != client.get(website_url + '/llms.txt').text
+
+
+def test_generation_lookup_is_scoped_to_its_website(client, db, settings):
+    first = submit(client)
+    finish(db, settings, 'First')
+    second = submit(client, 'https://other.test/')
+    finish(db, settings, 'Second')
+    first_version = db.latest(first['website_id'])['generation_id']
+    other_site = client.get(f"/api/websites/{second['website_id']}/generations/{first_version}")
+    assert other_site.status_code == 404
+    assert other_site.json()['error']['code'] == 'not_found'
+    assert client.get(f"/api/websites/{first['website_id']}/generations/missing").status_code == 404
 
 
 def test_multiple_websites_keep_separate_outputs(client, db, settings):

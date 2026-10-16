@@ -124,6 +124,20 @@ code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
 .warnings summary { cursor: pointer; }
 .warnings p { margin: 10px 0 5px; }
 .warnings ul { padding-left: 18px; }
+.versions { font-size: 11px; line-height: 1.8; border: 1px solid #e4e8df; background: #f7f9f4; padding: 10px 16px; margin-bottom: 20px; border-radius: 6px; color: #4f6246; }
+.versions summary { cursor: pointer; display: flex; align-items: center; gap: 7px; }
+.versions-note { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; color: #7d8874; }
+.versions-list { list-style: none; padding: 0; margin: 8px 0 2px; display: flex; flex-direction: column; }
+.versions-list li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid #e9ede4; }
+.versions-list li:first-child { border-top: 0; }
+.versions-list li > :last-child { margin-left: auto; }
+.version-selected { font-weight: 600; }
+.version-badge { background: #edf3e8; color: #658054; border: 1px solid #dfe8d8; padding: 1px 6px; border-radius: 4px; font-size: 9px; font-weight: 400; }
+.version-viewing { color: #7d8874; font-size: 10px; }
+.version-banner { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; line-height: 1.8; color: #87713b; background: #fcf9ef; border: 1px solid #e9ddbd; border-radius: 6px; padding: 8px 14px; margin: 0 0 12px; }
+.version-banner .link-button { margin-left: auto; }
+.link-button { background: none; border: 0; padding: 0; font: inherit; color: #3d5635; text-decoration: underline; cursor: pointer; }
+.link-button:disabled { color: #a3ab99; cursor: default; }
 .spin { animation: spin 1.4s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .skip-link { position: absolute; z-index: 10; left: 15px; top: -70px; padding: 12px; background: var(--accent); color: white; }

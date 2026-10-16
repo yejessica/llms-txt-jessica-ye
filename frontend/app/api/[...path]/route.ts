@@ -8,7 +8,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   const { path } = await context.params;
   const route = path.join("/");
   const allowed = request.method === "GET"
-    ? /^(health|jobs\/[\w-]+|websites\/[\w-]+(\/(llms\.txt|download))?)$/.test(route)
+    ? /^(health|jobs\/[\w-]+|websites\/[\w-]+(\/(llms\.txt|download|generations(\/[\w-]+)?))?)$/.test(route)
     : /^(generate|websites\/[\w-]+\/refresh)$/.test(route);
   if (!allowed) return Response.json({ error: { code: "not_found" } }, { status: 404 });
 

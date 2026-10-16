@@ -229,6 +229,15 @@ class Database:
                 raise NotFound("No generated file is available yet")
             return dict(row)
 
+    def generation(self, website_id, generation_id):
+        self.get_website(website_id)
+        with self.connection() as conn:
+            row = conn.execute("SELECT * FROM generations WHERE website_id=? AND generation_id=?",
+                               (website_id, generation_id)).fetchone()
+            if row is None:
+                raise NotFound("Version not found")
+            return dict(row)
+
     def generations(self, website_id):
         self.get_website(website_id)
         with self.connection() as conn:

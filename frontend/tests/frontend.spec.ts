@@ -187,6 +187,49 @@ test("crawl warnings are visible and Markdown is rendered as safe text", async (
   await expect(page.getByLabel("llms.txt Markdown preview").locator("a")).toHaveCount(0);
 });
 
+test("previous versions can be listed, viewed, copied, and dismissed", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const calls = await mockApi(page);
+  const older = "# Example Domain\n\nAn older overview.\n";
+  let listed = 0;
+  await page.route("**/api/websites/site-1/generations", route => {
+    listed++;
+    return route.fulfill({ json: [
+      website.latest_generation,
+      { generation_id: "gen-0", content_hash: "old", generated_at: "2026-10-14T09:30:00Z", is_latest: false },
+    ] });
+  });
+  await page.route("**/api/websites/site-1/generations/gen-0", route => route.fulfill({ body: older, contentType: "text/plain" }));
+  await page.goto("/");
+  await submit(page);
+  const preview = page.getByLabel("llms.txt Markdown preview");
+  await expect(preview).toHaveText(markdown);
+  expect(listed).toBe(0);
+  await page.getByText("Previous versions", { exact: true }).click();
+  await expect(page.getByText("Current", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /^View version from/ }).click();
+  await expect(preview).toHaveText(older);
+  await expect(page.getByText("Viewing a previous version from", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Copy", exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(older);
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download", exact: true }).click();
+  expect(await readFile(await (await download).path(), "utf8")).toBe(older);
+  expect(calls.downloads).toBe(0);
+  await page.getByRole("button", { name: "Back to current" }).click();
+  await expect(preview).toHaveText(markdown);
+  expect(listed).toBe(1);
+});
+
+test("version history explains when there are no previous versions", async ({ page }) => {
+  await mockApi(page);
+  await page.route("**/api/websites/site-1/generations", route => route.fulfill({ json: [website.latest_generation] }));
+  await page.goto("/");
+  await submit(page);
+  await page.getByText("Previous versions", { exact: true }).click();
+  await expect(page.getByText("No previous versions yet.", { exact: false })).toBeVisible();
+});
+
 test("regeneration keeps the previous file until changed output arrives, and survives a failed refresh job", async ({ page }) => {
   const calls = await mockApi(page);
   await page.goto("/");
