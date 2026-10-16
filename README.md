@@ -6,7 +6,7 @@ a separate serial worker, and automatic scheduled recrawls. No LLM key, Docker,
 Redis, or external database is required. The standalone CLI remains available.
 
 **Status:** Phases 1–3 are complete. Frontend lint, type checking, production
-build, 26 mocked browser tests, and one live browser integration test pass.
+build, 44 mocked browser tests, and one live browser integration test pass.
 89 backend pytest tests and 10 subtests pass, including all 48 Phase 1 tests.
 A real `example.com` end-to-end run passed on October 15, 2026: initial generation,
 download, manual refresh, automatic recrawl, unchanged-output deduplication, and
@@ -25,6 +25,40 @@ grouped by phase below, newest first, with earlier phases preserved.
 | [Phase 4 — Managed deployment](#phase-4--managed-deployment-render) | One Render service, persistent SQLite, process supervision, submission limits, backups, and operations | Configuration prepared; live verification pending |
 
 **Tutorials:** [Run locally](#run-locally) · [Deploy to Render](#phase-4--managed-deployment-render) · [Alternative: VPS](#deployment-guide--single-ubuntu-vps)
+
+## URL shortcut
+
+Append a public website to the app's address to start generating automatically:
+
+```text
+http://localhost:3000/example.com
+http://localhost:3000/https://example.com/docs/
+```
+
+Replace `http://localhost:3000` with the deployed app's origin when hosted.
+Bare domains default to HTTPS; explicit HTTP and HTTPS URLs are supported.
+Paths, trailing slashes, and query parameters are passed to the existing crawler.
+The app redirects to its generation screen, fills in the target URL, and shows
+the usual progress, preview, copy, and download controls. Crawling still takes
+time and follows the same public-URL validation, robots rules, crawl scope,
+submission limits, and page budgets as manual submission.
+
+Once submitted, the address includes the target and job ID. Reloading or sharing
+that resulting link reopens the job, including a completed result, without
+submitting a new crawl. Use **Regenerate** to request a fresh crawl. Opening the
+original shortcut again requests generation (reusing an active job for the same
+normalized target). A new shortcut target takes precedence over another job
+saved in the browser. A missing job shows an error and lets you submit again.
+
+For URLs with fragments or unusual escaping, use the query form with a
+URL-encoded target, for example
+`/?url=https%3A%2F%2Fexample.com%2Fdocs%3Fversion%3D2`.
+Fragments in a directly pasted shortcut are browser-only and are not submitted.
+The generated file can be downloaded; this does not publish it to the target site.
+
+Verified with lint, TypeScript checking, a production build, 44 desktop/mobile
+browser tests, and a real `example.com` crawl through the production frontend,
+API, and worker. The live check also covers reload, copy, download, and refresh.
 
 ## Run locally
 

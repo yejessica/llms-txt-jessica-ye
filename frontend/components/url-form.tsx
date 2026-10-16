@@ -5,13 +5,14 @@ import { ArrowRight, Globe2, LoaderCircle, ShieldCheck } from "lucide-react";
 import { validateUrl } from "@/lib/api";
 
 interface UrlFormProps {
+  initialUrl?: string;
   busy: boolean;
   hasResult: boolean;
   onSubmit: (url: string) => Promise<void>;
 }
 
-export function UrlForm({ busy, hasResult, onSubmit }: UrlFormProps) {
-  const [url, setUrl] = useState("");
+export function UrlForm({ initialUrl = "", busy, hasResult, onSubmit }: UrlFormProps) {
+  const [url, setUrl] = useState(initialUrl);
   const [error, setError] = useState<string | null>(null);
 
   function submit(event: React.FormEvent<HTMLFormElement>) {

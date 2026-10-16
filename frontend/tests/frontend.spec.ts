@@ -15,13 +15,13 @@ const website = {
   latest_generation: { generation_id: "gen-1", content_hash: "abc", generated_at: job.completed_at, is_latest: true },
 };
 
-async function mockApi(page: Page, options: { statuses?: string[]; empty?: boolean; warnings?: string[] } = {}) {
+async function mockApi(page: Page, options: { statuses?: string[]; empty?: boolean; warnings?: string[]; url?: string } = {}) {
   const calls = { generate: 0, polls: 0, refresh: 0, downloads: 0 };
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/generate") {
       calls.generate++;
-      expect(route.request().postDataJSON()).toEqual({ url: "https://example.com" });
+      expect(route.request().postDataJSON()).toEqual({ url: options.url ?? "https://example.com" });
       return route.fulfill({ status: 202, json: created });
     }
     if (path.endsWith("/refresh")) {
@@ -232,4 +232,79 @@ test("network failure during submission is recoverable", async ({ page }) => {
   await submit(page);
   await expect(page.getByRole("main").getByRole("alert")).toContainText("Check your connection");
   await expect(page.getByRole("button", { name: "Generate llms.txt", exact: true })).toBeEnabled();
+});
+
+for (const [shortcut, target] of [
+  ["/example.com", "https://example.com"],
+  ["/https://example.com", "https://example.com"],
+  ["/http://example.com/docs/", "http://example.com/docs/"],
+  ["/example.com/docs/a%2Fb%3Fc%25?x=a%2Fb&url=another&job=target-job", "https://example.com/docs/a%2Fb%3Fc%25?x=a%2Fb&url=another&job=target-job"],
+]) {
+  test(`URL shortcut ${shortcut} starts generation automatically`, async ({ page }) => {
+    const calls = await mockApi(page, { url: target });
+    await page.goto(shortcut);
+    await expect(page.getByLabel("llms.txt Markdown preview")).toHaveText(markdown);
+    await expect(page.getByLabel("Generate for another website")).toHaveValue(target);
+    const location = new URL(page.url());
+    expect(location.pathname).toBe("/");
+    expect(location.searchParams.get("url")).toBe(target);
+    expect(location.searchParams.get("job")).toBe("job-1");
+    expect(calls.generate).toBe(1);
+  });
+}
+
+test("shortcut jobs resume while running and reopen after completion without submitting again", async ({ page }) => {
+  const calls = await mockApi(page, { statuses: ["pending", "completed"] });
+  await page.goto("/example.com");
+  await expect(page.getByText("Website queued. Waiting for an available worker.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("llms.txt Markdown preview")).toHaveText(markdown);
+  // The job URL also works after completion and without session storage.
+  await page.evaluate(() => sessionStorage.clear());
+  await page.reload();
+  await expect(page.getByLabel("llms.txt Markdown preview")).toHaveText(markdown);
+  expect(calls.generate).toBe(1);
+});
+
+test("explicit shortcut target takes precedence over a different saved job", async ({ page }) => {
+  await page.addInitScript(() => sessionStorage.setItem("llms-active-job", JSON.stringify({
+    job_id: "job-other", website_id: "site-other", url: "https://other.example.com", status: "running",
+  })));
+  const calls = await mockApi(page);
+  await page.goto("/example.com");
+  await expect(page.getByLabel("llms.txt Markdown preview")).toHaveText(markdown);
+  expect(calls.generate).toBe(1);
+  expect(calls.polls).toBe(1);
+});
+
+test("invalid shortcut targets and job links do not create jobs", async ({ page }) => {
+  const calls = await mockApi(page);
+  for (const shortcut of [
+    "/ftp://example.com", "/https://user:password@example.com", "/example.com:8080",
+    "/?url=javascript%3Aalert(1)", "/?url=https%3A%2F%2Fexample.com&url=https%3A%2F%2Fother.com",
+    "/?url=https%3A%2F%2Fexample.com&job=invalid%2Fjob",
+    `/?url=${encodeURIComponent("https://example.com/" + "a".repeat(2048))}`,
+  ]) {
+    await page.goto(shortcut);
+    await expect(page.getByRole("main").getByRole("alert")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Generate llms.txt", exact: true })).toBeEnabled();
+  }
+  expect(calls.generate).toBe(0);
+});
+
+test("a missing linked job shows recovery controls without automatically recrawling", async ({ page }) => {
+  const calls = await mockApi(page);
+  await page.route("**/api/jobs/job-missing", route => route.fulfill({ status: 404 }));
+  await page.goto("/?url=https%3A%2F%2Fexample.com&job=job-missing");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("no longer available");
+  expect(calls.generate).toBe(0);
+  await page.getByRole("button", { name: "Generate llms.txt", exact: true }).click();
+  await expect(page.getByLabel("llms.txt Markdown preview")).toHaveText(markdown);
+  expect(calls.generate).toBe(1);
+});
+
+test("shortcut catch-all preserves unknown route and API 404s and static assets", async ({ request }) => {
+  expect((await request.get("/not-a-website")).status()).toBe(404);
+  expect((await request.get("/api/not-a-route")).status()).toBe(404);
+  expect((await request.get("/icon.svg")).status()).toBe(200);
 });

@@ -1,12 +1,14 @@
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
-test("real Next.js proxy → FastAPI → SQLite → crawler worker → output and refresh", async ({ page, context }) => {
+test("URL shortcut → real Next.js proxy → FastAPI → SQLite → crawler worker → output and refresh", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await page.goto("/");
-  await page.getByLabel("Your website URL").fill("https://example.com");
+  let submissions = 0;
+  page.on("request", request => {
+    if (request.method() === "POST" && request.url().endsWith("/api/generate")) submissions++;
+  });
   const submission = page.waitForResponse(response => response.url().endsWith("/api/generate"));
-  await page.getByRole("button", { name: "Generate llms.txt", exact: true }).click();
+  await page.goto("/https://example.com");
   const response = await submission;
   expect(response.status()).toBe(202);
   const created = await response.json();
@@ -15,6 +17,10 @@ test("real Next.js proxy → FastAPI → SQLite → crawler worker → output an
   const preview = page.getByLabel("llms.txt Markdown preview");
   await expect(preview).toContainText("# Example Domain");
   const content = await preview.textContent();
+  expect(new URL(page.url()).searchParams.get("job")).toBe(created.job_id);
+  await page.reload();
+  await expect(preview).toHaveText(content!);
+  expect(submissions).toBe(1);
   await page.getByRole("button", { name: "Copy", exact: true }).click();
   await expect(page.getByRole("button", { name: "Copied!", exact: true })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(content);

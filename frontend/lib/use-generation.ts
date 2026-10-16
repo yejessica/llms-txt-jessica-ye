@@ -1,11 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, errorMessage } from "./api";
-import type { GenerationResult, Job, JobCreated } from "./types";
+import { api, ApiError, errorMessage, validateUrl } from "./api";
+import type { GenerationResult, Job } from "./types";
 
-interface ActiveJob extends JobCreated { url: string }
+interface ActiveJob { job_id: string; url: string }
 const SESSION_KEY = "llms-active-job";
+
+function linkToJob(url: string, jobId?: string) {
+  const location = new URL("/", window.location.href);
+  location.searchParams.set("url", url);
+  if (jobId) location.searchParams.set("job", jobId);
+  window.history.replaceState(window.history.state, "", location);
+}
 
 function remember(job: ActiveJob | null) {
   try {
@@ -21,7 +28,7 @@ function crawlError(job: Job): string {
   return "We couldn’t crawl this website. Please check that the URL is public and accessible, then try again.";
 }
 
-export function useGeneration() {
+export function useGeneration(initialUrl?: string, initialJobId?: string) {
   const [phase, setPhase] = useState<"idle" | "submitting" | "polling" | "paused">("idle");
   const [active, setActive] = useState<ActiveJob | null>(null);
   const [job, setJob] = useState<Job | null>(null);
@@ -30,22 +37,6 @@ export function useGeneration() {
   const [reconnecting, setReconnecting] = useState(false);
   const locked = useRef(false);
   const submission = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    try {
-      const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? "null");
-      if (saved && typeof saved.job_id === "string" && /^[\w-]+$/.test(saved.job_id)
-        && typeof saved.website_id === "string" && /^[\w-]+$/.test(saved.website_id)
-        && typeof saved.url === "string" && /^https?:\/\//.test(saved.url)) {
-        locked.current = true;
-        // Restore an in-flight job after hydration, before polling the real API.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setActive(saved);
-        setPhase("polling");
-      }
-    } catch { remember(null); }
-    return () => submission.current?.abort();
-  }, []);
 
   useEffect(() => {
     if (!active || phase !== "polling") return;
@@ -113,12 +104,14 @@ export function useGeneration() {
     setJob(null);
     setReconnecting(false);
     setPhase("submitting");
+    linkToJob(url);
     try {
       const created = websiteId
         ? await api.refresh(websiteId, controller.signal)
         : await api.generate(url, controller.signal);
       if (controller.signal.aborted) return;
       const next = { ...created, url };
+      linkToJob(url, created.job_id);
       // A new website should never be paired with the previous site's preview.
       setResult(previous => previous?.website.website_id === created.website_id ? previous : null);
       setActive(next);
@@ -131,6 +124,43 @@ export function useGeneration() {
       locked.current = false;
     }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Defer bootstrapping so React Strict Mode's effect cleanup cannot abort
+    // the one automatic submission and leave the duplicate-submission lock set.
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (initialUrl !== undefined || initialJobId !== undefined) {
+        const message = validateUrl(initialUrl ?? "");
+        if (message) { setError(message); return; }
+        if (initialJobId !== undefined) {
+          if (!/^[\w-]+$/.test(initialJobId)) {
+            setError("This job link is invalid. Generate the file again.");
+            return;
+          }
+          locked.current = true;
+          setActive({ job_id: initialJobId, url: initialUrl! });
+          setPhase("polling");
+        } else {
+          // An explicit new target takes precedence over another saved job.
+          void start(initialUrl!.trim());
+        }
+        return;
+      }
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? "null");
+        if (saved && typeof saved.job_id === "string" && /^[\w-]+$/.test(saved.job_id)
+          && typeof saved.url === "string" && !validateUrl(saved.url)) {
+          locked.current = true;
+          linkToJob(saved.url, saved.job_id);
+          setActive(saved);
+          setPhase("polling");
+        }
+      } catch { remember(null); }
+    });
+    return () => { cancelled = true; submission.current?.abort(); };
+  }, [initialUrl, initialJobId, start]);
 
   function resume() {
     if (locked.current || !active) return;
