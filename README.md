@@ -11,7 +11,8 @@ build, 26 mocked browser tests, and one live browser integration test pass.
 A real `example.com` end-to-end run passed on October 15, 2026: initial generation,
 download, manual refresh, automatic recrawl, unchanged-output deduplication, and
 persistence across an API restart. Phase 1 selection-quality limitations remain;
-the five-site report is in the local `TESTING.md` if available. Nothing has been deployed.
+the five-site report is in the local `TESTING.md` if available. Phase 4 adds a
+Render deployment configuration; public deployment is pending verification.
 
 This is the project's cumulative README. Changes and setup instructions are
 grouped by phase below, newest first, with earlier phases preserved.
@@ -21,8 +22,9 @@ grouped by phase below, newest first, with earlier phases preserved.
 | [Phase 1 — Crawler and CLI](#phase-1--crawler-and-cli) | Safe crawling, extraction, ranking, Markdown generation/validation, and a standalone CLI | Complete |
 | [Phase 2 — Backend](#phase-2--backend-api-persistence-and-automatic-refresh) | FastAPI routes, SQLite persistence, background jobs, manual refresh, and scheduled recrawls | Complete |
 | [Phase 3 — Frontend](#phase-3--frontend) | Next.js interface, API proxy, job polling/recovery, preview, copy/download, regeneration, and browser tests | Complete |
+| [Phase 4 — Managed deployment](#phase-4--managed-deployment-render) | One Render service, persistent SQLite, process supervision, submission limits, backups, and operations | Configuration prepared; live verification pending |
 
-**Tutorials:** [Run locally](#run-locally) · [Deploy to a VPS](#deployment-guide--single-ubuntu-vps)
+**Tutorials:** [Run locally](#run-locally) · [Deploy to Render](#phase-4--managed-deployment-render) · [Alternative: VPS](#deployment-guide--single-ubuntu-vps)
 
 ## Run locally
 
@@ -136,6 +138,177 @@ runs inside the worker, so there is no Redis queue or additional scheduler
 service. Both CLI and worker reuse the same crawl/generation pipeline. The
 browser accesses FastAPI through Next.js, which avoids cross-origin requests.
 Downloading a file does not publish it to the submitted website.
+
+## Phase 4 — Managed deployment (Render)
+
+**Status: not deployed or publicly verified yet.** The deployment target changed
+from an Ubuntu VPS to managed hosting for a short take-home demonstration.
+The original VPS tutorial below remains an alternative. No VPS, SSH access,
+custom domain, Nginx installation, or manual certificate management is needed
+for the Render configuration. Phase 4 must remain incomplete until a real public
+HTTPS deployment passes the checks below.
+
+### Deployment configuration
+
+`render.yaml` defines one Python-native Render web service. Render's native
+runtimes also include Node/npm. `.node-version` selects Node 24 and
+`.python-version` selects Python 3.13; exact patch versions are printed in build
+logs. There is no Docker image or database migration.
+([Render runtimes](https://render.com/docs/native-runtimes))
+
+```text
+Browser → Render HTTPS → Next.js 0.0.0.0:$PORT
+                            → FastAPI 127.0.0.1:8000
+                                     ↕
+                          /var/data/llms.sqlite3
+                                     ↕
+                          one worker + scheduler
+```
+
+The same three existing application processes run inside one service to share
+the persistent disk. `deploy/run.py` starts them, forwards shutdown signals, and
+stops the entire group if any child exits so the platform can restart it.
+The existing worker lock prevents a second worker using the database. Do not
+add a separate Render worker or scale this service to multiple instances.
+
+| Setting | Configured value |
+| --- | --- |
+| Repository | `https://github.com/yejessica/llms-txt-jessica-ye` |
+| Service name | `llms-txt-jessica-ye` (actual public URL assigned by Render) |
+| Runtime / region | Python native / Virginia |
+| Workspace / compute | Hobby / `0.5c-512mb` (formerly Starter), 512 MB |
+| Disk | 1 GB mounted at `/var/data` |
+| API and worker database | `LLMS_DB_PATH=/var/data/llms.sqlite3` |
+| Next.js backend origin | Server-only `BACKEND_URL=http://127.0.0.1:8000` |
+| Build / start | `bash deploy/build.sh` / `python -m deploy.run` |
+| Public health check | `/api/health`, through the existing Next.js proxy |
+| Crawling | 20 pages, depth 2, 180-second job deadline, 1-second request delay |
+| Automatic recrawl | Every 86,400 seconds, inside the sole worker |
+| Submission limit | Shared demo bucket: 6/minute, burst 3; generation and refresh only |
+| Backups | After 30 seconds of uptime, then daily; retain newest 7 snapshots |
+| Auto deploy | Off; manually deploy a tested commit |
+
+The small instance is a starting point for this temporary demonstration, not a
+verified capacity guarantee. Its Node runtime heap is capped at 192 MB; the
+build gets a separate 2 GB heap cap. Monitor Render's memory metrics during real
+crawls. Upgrade compute if memory pressure prevents reliable operation.
+
+The Hobby workspace has no subscription fee. Compute is $7/month plus
+$0.25/month for a 1 GB disk, prorated to the second (roughly $0.24/day before
+taxes, bandwidth, or build overages). Check Render's review screen before
+creating resources. A free service cannot attach a persistent disk and can
+sleep, so this configuration uses paid compute.
+([Pricing](https://render.com/pricing), [billing](https://render.com/docs/faq),
+[free service limitations](https://render.com/docs/free))
+
+### Create the deployment
+
+1. Sign in to Render using a Hobby workspace. Add a payment method when prompted.
+2. Open [Deploy to Render](https://render.com/deploy?repo=https://github.com/yejessica/llms-txt-jessica-ye).
+   This imports the repository's `render.yaml`. Keep the repository root as the
+   service root so both `backend/` and `frontend/` are available.
+3. Review the single service and disk, then create the Blueprint. Do not add
+   Postgres, Redis, a separate worker, or a paid workspace upgrade.
+4. Wait for the build and deployment. The build runs backend and deployment
+   tests, frontend lint/type checking, and the production build. If it fails,
+   inspect Events/build logs before retrying.
+5. Open the assigned `https://...onrender.com` address and run the public checks
+   below. Render supplies HTTP-to-HTTPS redirects and manages TLS renewal.
+   ([TLS documentation](https://render.com/docs/tls))
+
+If configuring manually instead of using the Blueprint, copy the commands,
+environment variables, compute plan, disk, and health path from `render.yaml`.
+Do not use `frontend/` as the root directory or start the development server.
+The persistent disk is available only at runtime; the build never initializes
+the live database.
+
+### Verification record
+
+Local verification on October 15, 2026:
+
+- Existing backend suite: 89 tests and 10 subtests passed (one existing Starlette
+  deprecation warning).
+- Deployment safeguards: 2 tests passed. Submission throttling leaves polling
+  unrestricted; an open WAL database produces a consistent snapshot; isolated
+  recovery verifies rows, stored Markdown hashes, foreign keys, and writes.
+- Frontend lint, type checking, and Node 24 production webpack build passed.
+- All 26 desktop/mobile browser tests passed, including the new HTTP 429 error
+  message. The real local production integration test passed against
+  `example.com`, checking proxy submission, polling, preview, clipboard bytes,
+  download bytes, regeneration, and private-IP rejection.
+- A separate local check of the actual `deploy.run` production launcher passed:
+  real crawl and refresh, proxy health, rate-limited submissions with unrestricted
+  polling, automatic verified backup, mode-0600 database, cleanup after a killed
+  worker, persisted output after a launcher restart, and graceful shutdown.
+  These used temporary storage, Node 24.22.0 and Python 3.13.2 on macOS.
+- Public HTTPS, real deployed crawl, UI copy/download/regeneration, mobile
+  layout, platform restart/persistence, disk permissions, logs, and actual backup
+  output: **pending**. Local checks do not prove the Render service works.
+
+Before declaring deployment complete, record the assigned URL, deployed commit,
+runtime versions, public homepage/health responses and HTTPS redirect, completed
+job ID and metadata for `https://example.com`, preview/copy/download equality,
+regeneration, safe error responses and HTTP 429 behavior, mobile layout, memory
+metrics, logs, backup verification, and persistence after a service restart.
+TLS renewal is platform-managed; distinguish the verified live certificate from
+a future renewal that has not yet occurred.
+
+### Operations, backups, rollback, and teardown
+
+Use the service's Render dashboard:
+
+- **Logs**: combined API, worker, frontend, and supervisor logs. The supervisor
+  labels each child PID; the worker logs completed or failed jobs.
+- **Metrics**: memory/CPU and disk usage; watch for out-of-memory exits.
+- **Manual Deploy → Restart service**: restart all three processes. Afterward,
+  check `/api/health` and retrieve a previously generated file. Interrupted jobs
+  are recovered by the worker's existing recovery path.
+- **Manual Deploy → Deploy a specific commit**: deploy a tested Git revision.
+  Roll back by deploying the previously verified compatible commit. Disk data
+  persists. Do not restore an older database unless data rollback is intended.
+
+In the Render **Shell**, with the service's environment:
+
+```sh
+python deploy/backup.py
+ls -l /var/data /var/data/backups
+python deploy/backup.py --verify /var/data/backups/CHOSEN_SNAPSHOT.sqlite3
+```
+
+Snapshots use Python's SQLite online backup API, convert the snapshot to a
+self-contained rollback-journal file, and check an isolated restored copy before
+publishing the snapshot. Verification never opens the live database for writes.
+The source remains in WAL mode. Generated files have mode 0600 under a private
+umask. This is a database backup, not an off-platform disaster-recovery service.
+Download a chosen snapshot privately before deleting the service/disk. Render's
+disk snapshots are not a substitute for a SQLite-consistent backup.
+
+For a data restore, stop all application processes first. Preserve the existing
+database, WAL, and SHM as a matched set; install a verified snapshot without old
+WAL/SHM files and restart. The supervisor restarts stopped children, so do not
+replace live files in an ordinary Shell session. Use a temporary maintenance
+start command with application children disabled for a controlled restore.
+Rehearse using `--verify` first; no live data restore has been performed.
+
+After the deadline, download anything to retain, then delete this service and
+its disk in Render and check Billing for remaining resources. Merely turning
+off auto-deploy does not stop hosting charges.
+
+### Remaining limitations
+
+- The public deployment has not yet been verified; the 512 MB memory budget is
+  unproven until tested on Render.
+- The limiter is shared across demo visitors, resets on restart, and is not a
+  per-user quota. GET polling, metadata, preview, health, and downloads are not
+  limited. HTTP 429 shows a useful busy message and preserves `Retry-After`.
+- No authentication or ownership isolation; generated website results are
+  accessible by their IDs. Keep this a small temporary review demonstration.
+- Health covers Next.js → API → database, not an independently proven crawl.
+  Supervisor exit monitoring detects a stopped child, not a hung worker.
+- One service and disk mean deployments/restarts have brief downtime. Backups
+  on that disk do not protect against deletion or loss of the hosting account.
+- Crawling remains serial, bounded, and robots-aware. JavaScript-only websites,
+  robots restrictions, and site throttling retain the earlier limitations.
 
 ## Phase 3 — Frontend
 

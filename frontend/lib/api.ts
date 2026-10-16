@@ -37,6 +37,9 @@ async function request<T>(path: string, options: RequestInit = {}, asText = fals
       ]),
     });
     if (!response.ok) {
+      if (response.status === 429) {
+        throw new ApiError("The demo is busy. Wait a moment before generating or regenerating again.", 429);
+      }
       if (response.status === 422) {
         throw new ApiError("This URL must resolve to a public HTTP(S) website without credentials or a custom port.", 422);
       }

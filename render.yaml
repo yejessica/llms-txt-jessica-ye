@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: llms-txt-jessica-ye
+    runtime: python
+    plan: 0.5c-512mb
+    region: virginia
+    autoDeployTrigger: off
+    buildCommand: bash deploy/build.sh
+    startCommand: python -m deploy.run
+    healthCheckPath: /api/health
+    disk:
+      name: llms-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BACKEND_URL
+        value: http://127.0.0.1:8000
+      - key: LLMS_DB_PATH
+        value: /var/data/llms.sqlite3
+      - key: LLMS_CHECK_INTERVAL
+        value: "86400"
+      - key: LLMS_MAX_PAGES
+        value: "20"
+      - key: LLMS_MAX_DEPTH
+        value: "2"
+      - key: LLMS_JOB_TIMEOUT
+        value: "180"
+      - key: LLMS_REQUEST_DELAY
+        value: "1"
+      - key: LLMS_SUBMISSIONS_PER_MINUTE
+        value: "6"
+      - key: LLMS_SUBMISSION_BURST
+        value: "3"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=192

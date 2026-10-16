@@ -128,10 +128,10 @@ test("failed crawls and empty files show useful errors without server details", 
 
 test("submission errors handle unavailable service, timeout, and backend URL rejection", async ({ page }) => {
   await page.goto("/");
-  for (const status of [502, 504, 422]) {
+  for (const status of [502, 504, 422, 429]) {
     await page.route("**/api/generate", route => route.fulfill({ status, body: "private stack trace must not appear" }));
     await submit(page);
-    await expect(page.getByRole("main").getByRole("alert")).toContainText(status === 504 ? "timed out" : status === 422 ? "public HTTP(S)" : "generation service");
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(status === 504 ? "timed out" : status === 422 ? "public HTTP(S)" : status === 429 ? "demo is busy" : "generation service");
     await expect(page.getByRole("main").getByRole("alert")).not.toContainText("stack trace");
     await expect(page.getByRole("button", { name: "Generate llms.txt", exact: true })).toBeEnabled();
     await page.unroute("**/api/generate");
