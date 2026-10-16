@@ -53,11 +53,15 @@ def extract(html, url, depth, start):
     title=clean(soup.title.get_text(" ")) if soup.title else ""
     headings=[clean(h.get_text(" ")) for h in soup.find_all(["h1","h2","h3"])][:30]
     meta=soup.find("meta",attrs={"name":re.compile("^description$",re.I)}) or soup.find("meta",attrs={"property":"og:description"})
-    for node in soup.select("script,style,nav,header,footer,aside,form,[role=navigation],.advertisement,.ads"):
+    # Strip confirmed navigation before extraction so differing menus do not
+    # prevent duplicate detection. Semantic headers may contain the introduction.
+    for node in soup.select("script,style,nav,[role=navigation],.advertisement,.ads"):
         node.decompose()
-    # Strip navigation before either extractor: thin pages otherwise retain nav
-    # text in Trafilatura, preventing identical body content from matching.
     extracted=trafilatura.extract(str(soup),include_comments=False,include_tables=False) if trafilatura else None
+    # Apply broader pruning only to the fallback text and description source.
+    # Keep headers here too, including on pages with no article/main wrapper.
+    for node in soup.select("footer,aside,form"):
+        node.decompose()
     content=clean(extracted or soup.get_text(" "))
     description=concise(meta.get("content", "")) if meta else ""
     if not description:
