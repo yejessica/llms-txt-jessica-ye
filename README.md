@@ -267,25 +267,6 @@ real paragraph. Descriptions are shortened, never rewritten or invented.
   corrected. See the
   [comparison report](backend/benchmarks/results-crawler-improvements.md).
 
-**Not yet known**
-
-- **The numbers are hand-picked.** The scoring weights were chosen by judgment
-  and adjusted against the benchmark. They weren't derived from data or tuned
-  systematically, so other weights might work as well or better.
-- **The benchmark is graded by its author.** The same person chose the expected
-  pages and the rules. To limit this, expectations change only after inspecting
-  the site, never just to raise the score.
-- **12 sites is a sanity check, not proof** of how well this works across the
-  whole web.
-- **Content quality hasn't been reviewed yet.** "Passing" means the expected
-  links appeared with no errors. A person still has to judge whether the
-  descriptions are accurate and the file is actually useful, and those manual
-  reviews are pending.
-
-**Next steps to strengthen this:** finish the manual reviews, add more sites
-with expected pages chosen by someone else, and compare the output with real
-`llms.txt` files that site owners have published themselves.
-
 ### How data is stored
 
 All state lives in one SQLite file (`backend/data/llms.sqlite3` locally,
