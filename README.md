@@ -526,6 +526,70 @@ the job ID, so you can reload or share that link to reopen the same result
 without starting a new crawl. For URLs with `#` fragments or unusual characters,
 use the encoded form: `/?url=https%3A%2F%2Fexample.com%2Fdocs%3Fversion%3D2`.
 
+#### How the shortcut works
+
+The shortcut is just a **redirect**. When you visit
+`https://<app>/example.com`, the browser asks the app's server for a page whose
+*path* is `/example.com`. No such page exists, so the server translates that path
+into a normal "generate this URL" request and sends the browser there.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor B as Browser
+    participant R as Next.js catch-all route<br/>app/[...target]/route.ts
+    participant P as Home page + Generator<br/>app/page.tsx, lib/use-generation.ts
+    participant API as /api/generate
+
+    B->>R: GET /example.com
+    R->>R: Does the path look like a website?<br/>Add https:// if missing
+    R-->>B: 307 redirect → /?url=https%3A%2F%2Fexample.com
+    B->>P: GET /?url=https://example.com
+    P->>P: Read the url parameter, fill in the form
+    P->>API: POST {"url": "https://example.com"} (automatic)
+    API-->>P: {job_id: "abc123", ...}
+    P->>B: Rewrite the address bar → /?url=…&job=abc123
+    Note over B,P: Reloading or sharing this link reopens job abc123<br/>instead of starting a new crawl
+```
+
+Step by step:
+
+1. **Catching the path.** Next.js tries its real routes first: the home page,
+   `/api/*`, and static files. Anything left over goes to the catch-all route
+   `frontend/app/[...target]/route.ts`. The `[...target]` folder name means
+   "match any path".
+2. **Checking it's a website.** The route only accepts paths that look like a
+   domain (a dot in the first part, such as `example.com`) or that start with a
+   scheme (`https:/…`). Anything else, such as `/foo`, gets a normal
+   **404 Not Found**, so typos don't trigger crawls.
+3. **Fixing up the address.** Browsers and Next.js collapse double slashes, so
+   a pasted `https://example.com` arrives as `https:/example.com`. The route
+   restores the `//`. A bare domain gets `https://` added in front. Any `?query`
+   on the end is kept unchanged.
+4. **Redirecting.** The route answers with an HTTP **307 redirect** to
+   `/?url=<the encoded target>`. The redirect uses a relative address (`/?url=…`,
+   not a full `https://host/…`). This keeps the browser on the app's public
+   address even behind Render's proxy, where the server's own internal address
+   is `0.0.0.0:10000`. It is also marked `no-store` so the browser doesn't cache it.
+5. **Auto-generating.** The home page reads the `url` parameter and passes it
+   to the generator. The generator validates it and immediately submits it, as
+   if you had clicked **Generate**. The backend still runs its full safety
+   checks, robots rules, rate limit, and page budget. If the same site is already
+   being crawled, the backend returns that existing job instead of starting a
+   second one.
+6. **Making the link shareable.** Once the job exists, the page rewrites the
+   address bar to `/?url=…&job=<job_id>`. It uses `history.replaceState`, so this
+   doesn't add an extra Back-button entry. Opening a link that has `job=` resumes
+   watching that job rather than submitting a new crawl. Viewing an older
+   version adds `&version=<generation_id>` in the same way.
+
+The address is the source of truth. A shortcut or a `?url=` link starts a job,
+and a `?url=…&job=…` link reopens one. A plain visit to `/` resumes the last
+in-progress job from this browser tab, which is saved in `sessionStorage`.
+
+> **Why `#` fragments are lost:** browsers never send the part after `#` to a
+> server, so the route can't see it. Use the encoded `?url=` form for those.
+
 ### Command-line tool (no web app needed)
 
 The CLI runs the crawler once and writes files to disk. It doesn't use the
