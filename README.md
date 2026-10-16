@@ -5,6 +5,9 @@ pages, and writes an [`llms.txt`](https://llmstxt.org/) file for it. An
 `llms.txt` file is a short Markdown summary of a website, with links, that is
 meant to help AI assistants find their way around the site.
 
+**Live app:** <https://llms-txt-jessica-ye.onrender.com>. Try
+<https://llms-txt-jessica-ye.onrender.com/example.com>.
+
 - **No AI or API keys needed.** The output is built by fixed rules
   (deterministic), not by a language model.
 - **No Docker, Redis, or database server.** Everything is stored in one
@@ -922,10 +925,11 @@ command. Rehearse with `--verify` first.
 | Crawler + CLI | Complete |
 | API, database, worker, automatic re-crawls | Complete |
 | Web frontend, URL shortcuts, version history | Complete |
-| Render configuration | Prepared and tested locally with the real production launcher. **A public Render deployment hasn't been verified yet.** |
+| Render deployment | **Live** at <https://llms-txt-jessica-ye.onrender.com>, serving over HTTPS with HTTP redirected to HTTPS |
 | Ubuntu VPS guide | Written; not yet run on a real server |
 
-Local verification as of October 2026: the backend tests, the deployment tests,
+Verification as of October 2026: the public Render deployment is working, and
+locally, the backend tests, the deployment tests,
 the frontend lint, type check, and build, the mocked browser tests on desktop
 and mobile, and a live end-to-end `example.com` run (generate, download,
 refresh, automatic re-crawl, unchanged-output detection, and persistence across
