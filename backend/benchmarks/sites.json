@@ -8,7 +8,7 @@
   {"name":"books","type":"Ecommerce sandbox","url":"https://books.toscrape.com/","expected_urls":["https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html"]},
   {"name":"quotes","type":"Directory sandbox","url":"https://quotes.toscrape.com/","expected_urls":["https://quotes.toscrape.com/author/Albert-Einstein/"]},
   {"name":"gov-uk","type":"Government information portal","url":"https://www.gov.uk/","expected_urls":["https://www.gov.uk/browse/benefits"]},
-  {"name":"nasa","type":"Institutional news and media","url":"https://www.nasa.gov/","expected_urls":["https://www.nasa.gov/missions/"]},
+  {"name":"nasa","type":"Institutional news and media","url":"https://www.nasa.gov/","expected_urls":["https://www.nasa.gov/nasa-missions/"]},
   {"name":"julia-evans","type":"Technical blog","url":"https://jvns.ca/","expected_urls":["https://jvns.ca/about/"]},
   {"name":"diagrams","type":"JavaScript application (known limitation)","url":"https://app.diagrams.net/","expected_urls":["https://app.diagrams.net/"],"min_content_characters":300}
 ]

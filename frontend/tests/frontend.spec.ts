@@ -417,4 +417,10 @@ test("shortcut catch-all preserves unknown route and API 404s and static assets"
   expect((await request.get("/not-a-website")).status()).toBe(404);
   expect((await request.get("/api/not-a-route")).status()).toBe(404);
   expect((await request.get("/icon.svg")).status()).toBe(200);
+  for (const path of ["/sitemap.xml", "/robots.txt", "/llms.txt", "/sitemap_index.xml",
+    "/sitemap-news.xml.gz", "/manifest.json", "/SITEMAP.XML?test=1"]) {
+    const response = await request.get(path, { maxRedirects: 0 });
+    expect(response.status(), path).toBe(404);
+    expect(response.headers().location, path).toBeUndefined();
+  }
 });

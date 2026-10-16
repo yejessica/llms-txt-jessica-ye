@@ -154,13 +154,16 @@ flowchart LR
 1. **Safe fetching.** Before every connection, the crawler looks up the site's
    IP address and refuses anything private (such as `127.0.0.1` or `10.x.x.x`).
    This stops someone from using the app to probe internal networks (an attack
-   called SSRF). Redirects are checked the same way. Responses are capped at
-   2 MB.
+   called SSRF). Redirects are checked the same way. Ordinary pages are capped at
+   2 MB; sitemap downloads have separate streaming limits listed below.
 2. **Discovering pages.** The crawler reads `robots.txt` and any sitemaps
-   (including gzip-compressed ones), then does a *breadth-first* crawl: first the
-   page you submitted, then the pages it links to, then the pages *those* link
-   to, up to the depth and page limits. By default it stays inside the folder
-   you submitted. For example, `https://docs.python.org/3/` stays under `/3/`.
+   (including gzip-compressed ones), then prioritizes navigation links and
+   different site sections so a small page budget covers more useful areas.
+   Large sitemaps are streamed with byte, entry, and time limits. By default the
+   crawler stays inside the folder you submitted. For example,
+   `https://docs.python.org/3/` stays under `/3/`. It supports bare/`www.` hostname
+   pairs and a limited number of meaningful query variants, checking robots
+   permission for each destination origin.
 3. **Extraction.** [BeautifulSoup](https://www.crummy.com/software/BeautifulSoup/)
    reads titles, descriptions, headings, and links.
    [Trafilatura](https://trafilatura.readthedocs.io/) pulls out the main body text.
@@ -274,7 +277,7 @@ llms-txt-jessica-ye/
 │   │   ├── crawler/
 │   │   │   ├── fetcher.py    ← safe HTTP fetching, robots.txt, rate limits
 │   │   │   ├── sitemap.py    ← sitemap.xml discovery (incl. .gz)
-│   │   │   ├── crawler.py    ← breadth-first crawl
+│   │   │   ├── crawler.py    ← prioritized crawl
 │   │   │   ├── extractor.py  ← pull title/description/text/links from HTML
 │   │   │   ├── dedup.py      ← merge duplicate pages
 │   │   │   └── urls.py       ← URL cleanup and scope rules
@@ -514,6 +517,12 @@ which is why the commands above run `set -a; source .env; set +a`.
 | `LLMS_REQUEST_TIMEOUT` | `15` | Timeout for a single network request |
 | `LLMS_REQUEST_DELAY` | `1` | Minimum gap between requests to the same site |
 | `LLMS_CRAWL_SCOPE` | `directory` | `directory` or `site` (see CLI `--crawl-scope`) |
+| `LLMS_MAX_SITEMAP_BYTES` | `52428800` (50 MiB) | Maximum decompressed XML bytes per sitemap |
+| `LLMS_MAX_SITEMAP_COMPRESSED_BYTES` | `10485760` (10 MiB) | Maximum compressed bytes per gzip sitemap |
+| `LLMS_MAX_SITEMAP_ENTRIES` | `50000` | Maximum entries per sitemap |
+| `LLMS_MAX_SITEMAP_TOTAL_BYTES` | `67108864` (64 MiB) | Combined XML byte budget for sitemap discovery |
+| `LLMS_SITEMAP_TIMEOUT` | `30` | Maximum seconds for sitemap discovery |
+| `LLMS_MAX_QUERY_VARIANTS` | `5` | Maximum query variants per hostname and path |
 | `LLMS_SUBMISSIONS_PER_MINUTE` | `6` | *Production only* (`deploy/api.py`): shared rate limit for generate/refresh |
 | `LLMS_SUBMISSION_BURST` | `3` | *Production only*: how many submissions can arrive at once before limiting starts |
 
@@ -563,8 +572,11 @@ python -m app.benchmark --only example --only python-docs
 ```
 
 The [coverage benchmark](backend/benchmarks/README.md) measures how well the
-crawler finds the key pages of 12 real sites. The latest results are in
-[`results-2026-10-16.md`](backend/benchmarks/results-2026-10-16.md).
+crawler finds the key pages of 12 real sites. The
+[crawler improvements comparison](backend/benchmarks/results-crawler-improvements.md)
+records the newer run alongside the
+[original results](backend/benchmarks/results-2026-10-16.md). Automated candidates
+still need manual content review.
 
 ---
 
@@ -736,8 +748,9 @@ command. Rehearse with `--verify` first.
   measures this.
 - **One crawl at a time.** Crawling is deliberately serial and polite, so large
   sites take minutes and jobs wait in line.
-- **Exact hostname only.** `www.` versions, subdomains, and URLs with query
-  strings aren't followed. Submit the site's final public address.
+- **Limited URL variants.** Only the submitted hostname and its exact bare/`www.`
+  counterpart are followed; other subdomains are excluded. Query crawling is
+  bounded, and tracking, sorting, session, and pagination parameters are filtered.
 - **No user accounts.** Anyone with a result's ID can view it. The rate limit is
   shared by all visitors and resets on restart. This setup is meant for a small
   demo, not a public service.

@@ -23,7 +23,7 @@ def assess(case, stats, exit_code, log="", review=None, output_sha256=None):
     missing = [url for url in expected if url not in urls]
     duplicate_urls = len(urls) - len(set(urls))
     out_of_scope = [url for url in urls if not in_crawl_scope(
-        url, case["url"], case.get("crawl_scope", "directory"))]
+        url, case["url"], case.get("crawl_scope", "directory"), allow_www=True)]
     substantial = any(page.get("content_characters", 0) >=
                       case.get("min_content_characters", 120) for page in selected)
     warnings = stats.get("errors", [])
