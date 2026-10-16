@@ -7,7 +7,7 @@ Redis, or external database is required. The standalone CLI remains available.
 
 **Status:** Phases 1–3 are complete. Frontend lint, type checking, production
 build, 44 mocked browser tests, and one live browser integration test pass.
-120 backend pytest tests and 10 subtests pass, including the crawler coverage
+146 backend pytest tests and 10 subtests pass, including the crawler coverage
 and benchmark regression tests. Two deployment safeguard tests also pass.
 A real `example.com` end-to-end run passed on October 15, 2026: initial generation,
 download, manual refresh, automatic recrawl, unchanged-output deduplication, and
@@ -64,10 +64,39 @@ API, and worker. The live check also covers reload, copy, download, and refresh.
 
 ## Website coverage improvements
 
-The crawler now reads gzip-compressed sitemap files and sitemap indexes, with
-the existing 2 MB response budget also enforced on decompressed XML. Compressed
-children can be discovered through robots.txt or sitemap indexes; decompression
-is detected by gzip bytes, not just the URL extension.
+The crawler prioritizes pages **before fetching them**. Homepage navigation,
+section overviews, link labels, depth, and repeated incoming links influence the
+queue. Visits are balanced across URL sections; product pages can be reached
+before exhausting category links, and one sitemap section cannot fill the entire
+candidate sample. Image-map links and image alt labels support older navigation.
+The output still uses a separate ranking/selection step after crawling.
+
+Sitemap files and gzip indexes now use incremental parsing instead of loading
+whole documents or keeping them in the response cache. Ordinary pages retain
+their 2 MB limit. Sitemap defaults are 50 MiB of XML per file, 10 MiB compressed,
+50,000 entries per file, 64 MiB of XML across discovery, and 30 seconds for
+discovery (an in-progress network read also has its request timeout). Up to 12
+sitemap documents are requested and at most 5,000 candidate URLs are retained;
+section quotas may retain fewer. Documents that fail XML/gzip validation do not
+publish their partial candidates. Reaching a byte/time limit records a warning
+and continues with navigation and any earlier valid maps. DTDs, entities, deep
+nesting, oversized fields, malformed gzip, and trailing gzip members are rejected.
+These are resource limits, not a promise to enumerate every URL of a large site.
+
+Bare hostnames and their exact `www` counterparts are supported, including
+redirects, with public-IP validation for every connection and independent
+robots.txt checks for each destination origin. Subdomains such as `docs.example.com`
+remain outside scope. Same-site HTTP links or redirect locations encountered on
+HTTPS are retried over HTTPS; the crawler does not follow a plaintext downgrade.
+Original alias URLs are not assumed equivalent: only fetched content and verified
+canonicals can collapse them.
+
+Known tracking parameters (`utm_*`, `gclid`, `fbclid`, `msclkid`, `mc_cid`, `mc_eid`,
+`_ga`) are removed. Other query values, their order, repeated keys, and escaping
+are preserved. Discovered sorting/session/pagination parameters are filtered,
+and only five query variants per hostname/path are admitted by default. There
+are also eight-field and 2,048-character limits for discovered URLs. This supports
+content such as `?page_id=123` while keeping parameter combinations bounded.
 
 Page crawling defaults to the submitted directory. For example,
 `https://docs.python.org/3/` stays inside `/3/`, including sitemap-discovered pages
@@ -94,7 +123,11 @@ It separates automated candidates from manually reviewed quality passes and
 retains failed/blocked sites in its results. The
 [October 16 live report](backend/benchmarks/results-2026-10-16.md) records 7
 automated candidates, 3 cases needing review, and 2 partial crawls; manual quality
-reviews remain pending. Run from `backend/`:
+reviews remain pending. The newer
+[crawler improvements comparison](backend/benchmarks/results-crawler-improvements.md)
+records 11 automated candidates using those original expectations, plus a
+separately successful NASA rerun after correcting its current navigation URL.
+No manually reviewed quality pass is claimed. Run from `backend/`:
 
 ```sh
 python -m app.benchmark --only example --only python-docs
@@ -664,8 +697,8 @@ successful file downloadable.
 
 The API never crawls. `app/generation.py` shares the existing
 `Crawler(CrawlConfig).crawl` → `select_pages` → `render` → `validate` sequence
-with the CLI. The crawler, ranking rules, redirects, IP pinning, and robots policy
-are unchanged. Submission performs initial URL/DNS validation; execution checks
+with the CLI. Both entry points share crawl priorities, URL rules, IP pinning,
+and per-origin robots checks. Submission performs initial URL/DNS validation; execution checks
 DNS again and validates every redirect, preventing rebinding from bypassing the
 fetcher's public-IP checks. Submission waits for DNS validation, not the crawl.
 
@@ -709,9 +742,16 @@ and load it into both processes, or export variables directly.
 | `LLMS_REQUEST_TIMEOUT` | `15` | Per-network-operation timeout |
 | `LLMS_REQUEST_DELAY` | `1` | Minimum request interval; robots policy may increase it |
 | `LLMS_CRAWL_SCOPE` | `directory` | Stay under submitted directory; `site` traverses the hostname |
+| `LLMS_MAX_SITEMAP_BYTES` | `52428800` | Maximum XML bytes per sitemap (50 MiB) |
+| `LLMS_MAX_SITEMAP_COMPRESSED_BYTES` | `10485760` | Maximum gzip input bytes per sitemap (10 MiB) |
+| `LLMS_MAX_SITEMAP_ENTRIES` | `50000` | Maximum URL/index entries per sitemap |
+| `LLMS_MAX_SITEMAP_TOTAL_BYTES` | `67108864` | Maximum XML bytes across sitemap discovery (64 MiB) |
+| `LLMS_SITEMAP_TIMEOUT` | `30` | Sitemap discovery time budget in seconds |
+| `LLMS_MAX_QUERY_VARIANTS` | `5` | Maximum admitted query URLs per hostname/path |
 
-The existing `CrawlConfig` still supplies response-size, sitemap, discovery,
-retry, and user-agent limits. CLI flags continue to configure standalone CLI
+`CrawlConfig` also supplies page response-size, discovery, retry, and user-agent
+limits. The new sitemap/query budgets can be configured through the worker
+environment or directly through `CrawlConfig` when importing the crawler. CLI flags continue to configure standalone CLI
 crawls; backend environment variables configure worker crawls.
 
 ### Phase 2 verification and limitations
@@ -783,7 +823,8 @@ python -m app.cli generate https://docs.python.org/3/ \
 
 Default limits: 40 attempted pages, depth 3, 25 selected pages, one concurrent
 request, 1-second minimum interval, 15-second per-operation timeout, 2 MB per
-response, 12 sitemap documents, and 5,000 discovered URLs. CLI ranges are 1–1,000
+ordinary page, 12 sitemap documents, and 5,000 retained discovered URLs. The
+separate sitemap byte/time budgets are documented above. CLI ranges are 1–1,000
 pages and depth 0–20. Other settings live in `app/config.py` and can be supplied
 through `CrawlConfig` when importing the crawler. Use `--delay 2` to request a
 slower two-second interval. The request interval increases
@@ -810,7 +851,7 @@ The Phase 1 tests use `unittest.TestCase`, which pytest discovers normally. Thos
 tests also run via `python -m unittest discover -s tests -v`; run pytest for the
 complete Phase 1 and Phase 2 suite. Unit tests use in-memory HTTP fixtures and
 never contact public sites. The Phase 1 tests cover URL security,
-normalization, sitemaps, BFS, deduplication, extraction, ranking, rendering,
+normalization, sitemaps, crawl scheduling, deduplication, extraction, ranking, rendering,
 validation, CLI output, errors, limits, and redirects. The live runner now invokes
 the real CLI on the [12-site benchmark](backend/benchmarks/README.md), retaining
 logs, JSON outcomes, and Markdown reports. Its exit code reflects automated
@@ -823,18 +864,20 @@ checks; quality passes additionally require review of the exact output bytes.
    a non-public IP. Requests connect to the checked IP directly while retaining
    the hostname for Host, TLS verification, and SNI. Environment proxies are not
    used. Redirects are manual, limited, scoped, and checked against robots rules.
-   Responses are bounded and cached within a crawl to avoid fetching redirect
-   targets twice. Canonical metadata cannot initiate an unsafe request.
-2. **Sitemaps:** fetch origin robots.txt, read declared same-origin sitemaps, and
+   Ordinary page responses are bounded and cached within a crawl to avoid fetching
+   redirect targets twice; sitemaps are streamed without caching their bodies. Canonical metadata cannot initiate an unsafe request.
+2. **Sitemaps:** fetch origin robots.txt, read declared permitted-host sitemaps, and
    check `/sitemap.xml`. Parse namespaced URL sets and nested indexes, preserve
    `lastmod` hints, filter scope, and bound sitemap traversal. XML entity/DOCTYPE
    declarations are rejected. Robots permission is checked for sitemap fetches.
-3. **BFS:** crawl the submitted page and its internal links breadth first using
-   pending/visited sets. When the linked frontier is exhausted, remaining sitemap
-   URLs supplement discovery as depth-one seeds. Depth zero never uses seeds.
-   Depth is discovery distance, not path segment count; a sitemap seed's true
-   link distance is unknown. Discovered includes eligible links found beyond the
-   crawl depth, and may include robots-blocked pages; only fetched HTML is output.
+3. **Prioritized traversal:** fetch the submitted page first, then prioritize
+   navigation and representative sections across linked and sitemap candidates.
+   Source, overview hints, labels, depth, and section visit counts determine the
+   next request. Sitemap entries use bounded, section-balanced sampling; part of
+   the URL budget is reserved for links found later. Depth zero never uses seeds.
+   Depth is discovery distance, not path segment count; sitemap seeds are depth
+   one because their true link distance is unknown. Discovered counts refer to
+   retained candidates and eligible links, not every sitemap entry scanned.
 4. **Extraction:** BeautifulSoup extracts titles, meta descriptions, headings,
    scoped links, and navigation links. Trafilatura extracts primary text. Cleaned
    BeautifulSoup text is the fallback if Trafilatura finds no content; if the
@@ -869,9 +912,10 @@ in SQLite.
 - Serial requests keep politeness, ordering, and failure handling simple. A large
   site can take minutes; CLI timeouts apply to individual network operations.
   The Phase 2 worker additionally imposes a whole-job deadline.
-- Scope is the exact hostname and effective origin, permitting HTTP to HTTPS
-  upgrades. `www` aliases, subdomains, and cross-origin sitemap hosting are not
-  followed automatically. Submit the final public hostname.
+- Scope includes the submitted host and exact bare/www counterpart, with robots
+  permission checked per origin. Other subdomains and external sitemap hosts
+  remain excluded. Same-site HTTP references on HTTPS are attempted via HTTPS;
+  no plaintext downgrade is sent.
 - Missing robots.txt (404/410) allows crawling; other errors fail closed. The
   crawler never bypasses denied rules. Robots rules and delays are a site policy,
   not authorization to access authenticated content.
@@ -880,9 +924,10 @@ in SQLite.
   redirect caching removes server-declared aliases. Other distinct URLs with
   identical extracted content and metadata now merge; differing metadata needs
   a verified canonical target to confirm an alias.
-- Query-bearing discovered links, common auth/search/cart routes, pagination, and
-  non-HTML asset extensions are filtered conservatively. This loses some useful
-  query-based pages. Ranking is heuristic and not semantically aware.
+- Meaningful queries are supported with finite variant/field/URL limits. Known
+  tracking values are removed; sorting/session/pagination queries, common
+  auth/search/cart routes, and non-HTML assets are filtered conservatively.
+  Some useful query-based pages can still be missed. Ranking remains heuristic.
 - No JavaScript execution, browser automation, general retries,
   persistent cache, incremental updates, or LLM summaries. Thin server HTML can
   produce thin output even when a browser shows substantial content.

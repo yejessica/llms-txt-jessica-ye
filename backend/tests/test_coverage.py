@@ -46,7 +46,7 @@ def test_sitemap_size_limit_before_and_after_decompression(data):
 
 
 def test_corrupt_compression_and_compressed_entities_rejected():
-    with pytest.raises((EOFError, OSError)):
+    with pytest.raises(ValueError, match='Truncated gzip'):
         parse_sitemap(gzip.compress(b'<urlset/>')[:-5])
     with pytest.raises(ValueError, match='entities'):
         parse_sitemap(gzip.compress(b'<!DOCTYPE x [<!ENTITY a "x">]><urlset/>'))

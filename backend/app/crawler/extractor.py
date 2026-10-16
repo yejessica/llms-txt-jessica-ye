@@ -5,7 +5,7 @@ try:
     import trafilatura
 except ImportError:
     trafilatura = None
-from .urls import normalize_url, in_scope, relevant
+from .urls import normalize_url, site_origin_allowed, site_url, relevant
 
 def clean(text):
     return re.sub(r"\s+", " ", text or "").strip()
@@ -27,6 +27,7 @@ class Page:
     nav_links: list[str] = field(default_factory=list)
     last_modified: str | None = None
     canonical: str | None = None
+    link_labels: dict[str, str] = field(default_factory=dict)
 
 def extract(html, url, depth, start):
     soup=BeautifulSoup(html,"html.parser")
@@ -34,18 +35,21 @@ def extract(html, url, depth, start):
     canonical=None
     if tag and tag.get("href"):
         try:
-            candidate=normalize_url(tag["href"],url)
-            if in_scope(candidate,start): canonical=candidate
+            candidate=site_url(tag["href"],start,url)
+            if site_origin_allowed(candidate,start): canonical=candidate
         except ValueError: pass
     # Canonicals are hints only. Keep the fetched URL until a canonical target
     # has itself been fetched; an unverified tag must never fabricate a link.
-    links=[]; nav=[]
-    for a in soup.find_all("a",href=True):
-        try: link=normalize_url(a["href"],url)
+    links=[]; nav=[]; labels={}
+    for a in soup.find_all(["a", "area"],href=True):
+        try: link=site_url(a["href"],start,url)
         except ValueError: continue
-        if in_scope(link,start) and relevant(link):
+        if site_origin_allowed(link,start) and relevant(link):
             links.append(link)
-            if a.find_parent(["nav","header"]) or a.find_parent(attrs={"role":"navigation"}): nav.append(link)
+            image = a.find("img", alt=True)
+            labels[link] = clean(a.get("aria-label") or a.get("alt") or a.get_text(" ")
+                                 or (image.get("alt") if image else "") or a.get("title"))[:200]
+            if a.name == "area" or a.find_parent(["nav","header"]) or a.find_parent(attrs={"role":"navigation"}): nav.append(link)
     title=clean(soup.title.get_text(" ")) if soup.title else ""
     headings=[clean(h.get_text(" ")) for h in soup.find_all(["h1","h2","h3"])][:30]
     meta=soup.find("meta",attrs={"name":re.compile("^description$",re.I)}) or soup.find("meta",attrs={"property":"og:description"})
@@ -59,4 +63,4 @@ def extract(html, url, depth, start):
     if not description:
         paragraph=next((clean(p.get_text(" ")) for p in soup.find_all("p") if len(clean(p.get_text(" ")))>40),"")
         description=concise(paragraph or content)
-    return Page(url,title or (headings[0] if headings else url),description,headings,content,depth,list(dict.fromkeys(links)),list(dict.fromkeys(nav)),canonical=canonical)
+    return Page(url,title or (headings[0] if headings else url),description,headings,content,depth,list(dict.fromkeys(links)),list(dict.fromkeys(nav)),canonical=canonical,link_labels=labels)

@@ -1,5 +1,8 @@
 # Website coverage benchmark
 
+The [crawler improvements comparison](results-crawler-improvements.md) records
+the next full run and the separately verified NASA navigation URL correction.
+
 The [October 16 results](results-2026-10-16.md) provide a recorded first run and
 known gaps, with a neighboring JSON evidence snapshot.
 
@@ -73,3 +76,9 @@ manifest and budgets, and inspect expected-page coverage, duplicates, content,
 warnings, and runtime together. Live results vary with site changes and access
 policies. Offline regression fixtures in `tests/test_coverage.py` verify gzip
 limits, directory boundaries, and deduplication without network variability.
+
+The current NASA expectation uses `/nasa-missions/`, verified by inspecting the
+homepage Missions link. The comparison report preserves the original `/missions/`
+expectation and full-run result separately. Alias hosts are allowed in scope
+checks only for the exact bare/www pair; the crawler still checks public IPs
+and destination robots rules. Query expectations compare normalized fetched URLs.

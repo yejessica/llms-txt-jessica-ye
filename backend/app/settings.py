@@ -20,6 +20,12 @@ class Settings(BaseModel):
     request_timeout: float = Field(default=15, gt=0)
     request_delay: float = Field(default=1, ge=0)
     crawl_scope: Literal["directory", "site"] = "directory"
+    max_sitemap_bytes: int = Field(default=52_428_800, ge=1, le=52_428_800)
+    max_sitemap_compressed_bytes: int = Field(default=10_485_760, ge=1, le=52_428_800)
+    max_sitemap_entries: int = Field(default=50_000, ge=1, le=50_000)
+    max_sitemap_total_bytes: int = Field(default=67_108_864, ge=1, le=536_870_912)
+    sitemap_timeout: float = Field(default=30, gt=0)
+    max_query_variants: int = Field(default=5, ge=1, le=100)
 
     @classmethod
     def from_env(cls):
@@ -31,4 +37,9 @@ class Settings(BaseModel):
     def crawl_config(self):
         return CrawlConfig(max_pages=self.max_pages, max_depth=self.max_depth,
                            timeout=self.request_timeout, delay=self.request_delay,
-                           crawl_scope=self.crawl_scope)
+                           crawl_scope=self.crawl_scope, max_sitemap_bytes=self.max_sitemap_bytes,
+                           max_sitemap_compressed_bytes=self.max_sitemap_compressed_bytes,
+                           max_sitemap_entries=self.max_sitemap_entries,
+                           max_sitemap_total_bytes=self.max_sitemap_total_bytes,
+                           sitemap_timeout=self.sitemap_timeout,
+                           max_query_variants=self.max_query_variants)

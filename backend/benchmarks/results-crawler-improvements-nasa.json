@@ -1,0 +1,190 @@
+{
+  "created_at": "2026-10-16T15:16:32.716098+00:00",
+  "total": 1,
+  "outcomes": {
+    "candidate": 1
+  },
+  "quality_passes": 0,
+  "results": [
+    {
+      "name": "nasa",
+      "type": "Institutional news and media",
+      "url": "https://www.nasa.gov/",
+      "command": [
+        "/Users/jessicaye/Documents/Projects/llms-txt-jessica-ye/backend/.venv/bin/python",
+        "-m",
+        "app.cli",
+        "generate",
+        "https://www.nasa.gov/",
+        "--max-pages",
+        "20",
+        "--max-depth",
+        "3",
+        "--crawl-scope",
+        "directory",
+        "--output",
+        "output/benchmarks/20261016T151557.970393Z/nasa-llms.txt",
+        "--verbose"
+      ],
+      "exit_code": 0,
+      "seconds": 34.74,
+      "stats": {
+        "website": "https://www.nasa.gov/",
+        "status": "complete",
+        "discovered": 4478,
+        "crawled": 20,
+        "selected": 20,
+        "attempted": 20,
+        "requests": 35,
+        "blocked": 0,
+        "seconds": 34.38,
+        "errors": [],
+        "crawl_scope": "directory",
+        "duplicates_removed": 0,
+        "selected_pages": [
+          {
+            "url": "https://www.nasa.gov/",
+            "title": "NASA",
+            "content_characters": 1286,
+            "description_characters": 174
+          },
+          {
+            "url": "https://www.nasa.gov/event-type/launch-schedule/",
+            "title": "Launch Schedule Archives - NASA",
+            "content_characters": 6478,
+            "description_characters": 219
+          },
+          {
+            "url": "https://www.nasa.gov/2026-news-releases/",
+            "title": "2026 News Releases - NASA",
+            "content_characters": 6406,
+            "description_characters": 60
+          },
+          {
+            "url": "https://www.nasa.gov/image-of-the-day/",
+            "title": "Image of the Day - NASA",
+            "content_characters": 5086,
+            "description_characters": 215
+          },
+          {
+            "url": "https://www.nasa.gov/interactives/",
+            "title": "Games and Interactives - NASA",
+            "content_characters": 3612,
+            "description_characters": 124
+          },
+          {
+            "url": "https://www.nasa.gov/nasa-brand-center/",
+            "title": "NASA Brand Center",
+            "content_characters": 5497,
+            "description_characters": 138
+          },
+          {
+            "url": "https://www.nasa.gov/newsletters/",
+            "title": "Newsletters - NASA",
+            "content_characters": 4757,
+            "description_characters": 150
+          },
+          {
+            "url": "https://www.nasa.gov/social-media/",
+            "title": "Official NASA Social Media Accounts - NASA",
+            "content_characters": 8239,
+            "description_characters": 18
+          },
+          {
+            "url": "https://www.nasa.gov/nasa-virtual-guest-program/",
+            "title": "NASA Virtual Guest Program - NASA",
+            "content_characters": 1649,
+            "description_characters": 72
+          },
+          {
+            "url": "https://www.nasa.gov/ebooks/",
+            "title": "e-Books - NASA",
+            "content_characters": 1517,
+            "description_characters": 137
+          },
+          {
+            "url": "https://www.nasa.gov/podcasts/",
+            "title": "Podcasts - NASA",
+            "content_characters": 1340,
+            "description_characters": 23
+          },
+          {
+            "url": "https://www.nasa.gov/podcasts-and-audio/",
+            "title": "Podcasts and Audio - NASA",
+            "content_characters": 1252,
+            "description_characters": 156
+          },
+          {
+            "url": "https://www.nasa.gov/multimedia/",
+            "title": "Multimedia - NASA",
+            "content_characters": 1213,
+            "description_characters": 178
+          },
+          {
+            "url": "https://www.nasa.gov/news/",
+            "title": "NASA News",
+            "content_characters": 713,
+            "description_characters": 81
+          },
+          {
+            "url": "https://www.nasa.gov/images/",
+            "title": "NASA Images - NASA",
+            "content_characters": 701,
+            "description_characters": 101
+          },
+          {
+            "url": "https://www.nasa.gov/apps/",
+            "title": "Mobile and Desktop Apps - NASA",
+            "content_characters": 674,
+            "description_characters": 23
+          },
+          {
+            "url": "https://www.nasa.gov/events/",
+            "title": "Events - NASA",
+            "content_characters": 6469,
+            "description_characters": 21
+          },
+          {
+            "url": "https://www.nasa.gov/nasa-blogs/",
+            "title": "Blogs - NASA",
+            "content_characters": 424,
+            "description_characters": 216
+          },
+          {
+            "url": "https://www.nasa.gov/a-to-z-topics-listing/",
+            "title": "A to Z Topics Listing - NASA",
+            "content_characters": 39287,
+            "description_characters": 59
+          },
+          {
+            "url": "https://www.nasa.gov/nasa-missions/",
+            "title": "Missions - NASA",
+            "content_characters": 3822,
+            "description_characters": 65
+          }
+        ]
+      },
+      "outcome": "candidate",
+      "signals": [],
+      "automated_checks_passed": true,
+      "quality_pass": false,
+      "manual_review_status": "pending",
+      "output_sha256": "5f6dc5bd9610b4aaeba9563260de793a8b95164db4cc97250473be5fe5ca3438",
+      "manual_review": {
+        "output_sha256": "5f6dc5bd9610b4aaeba9563260de793a8b95164db4cc97250473be5fe5ca3438",
+        "meaningful": null,
+        "accurate": null,
+        "irrelevant_urls": null,
+        "notes": ""
+      },
+      "expected_found": [
+        "https://www.nasa.gov/nasa-missions/"
+      ],
+      "expected_missing": [],
+      "expected_coverage": 1.0,
+      "duplicate_urls": 0,
+      "out_of_scope_urls": [],
+      "has_substantial_content": true
+    }
+  ]
+}

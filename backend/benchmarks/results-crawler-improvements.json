@@ -1,0 +1,1932 @@
+{
+  "created_at": "2026-10-16T15:13:58.460210+00:00",
+  "total": 12,
+  "outcomes": {
+    "candidate": 11,
+    "needs_review": 1
+  },
+  "quality_passes": 0,
+  "results": [
+    {
+      "name": "example",
+      "type": "Minimal static site",
+      "url": "https://example.com/",
+      "command": [
+        "/Users/jessicaye/Documents/Projects/llms-txt-jessica-ye/backend/.venv/bin/python",
+        "-m",
+        "app.cli",
+        "generate",
+        "https://example.com/",
+        "--max-pages",
+        "20",
+        "--max-depth",
+        "3",
+        "--crawl-scope",
+        "directory",
+        "--output",
+        "output/benchmarks/20261016T150921.424598Z/example-llms.txt",
+        "--verbose"
+      ],
+      "exit_code": 0,
+      "seconds": 2.69,
+      "stats": {
+        "website": "https://example.com/",
+        "status": "complete",
+        "discovered": 1,
+        "crawled": 1,
+        "selected": 1,
+        "attempted": 1,
+        "requests": 3,
+        "blocked": 0,
+        "seconds": 2.34,
+        "errors": [],
+        "crawl_scope": "directory",
+        "duplicates_removed": 0,
+        "selected_pages": [
+          {
+            "url": "https://example.com/",
+            "title": "Example Domain",
+            "content_characters": 156,
+            "description_characters": 156
+          }
+        ]
+      },
+      "outcome": "candidate",
+      "signals": [],
+      "automated_checks_passed": true,
+      "quality_pass": false,
+      "manual_review_status": "pending",
+      "output_sha256": "708f59c9bd95ade3dc8772eed207c8ec5573a7ef642febded6048c2459421486",
+      "manual_review": {
+        "output_sha256": "708f59c9bd95ade3dc8772eed207c8ec5573a7ef642febded6048c2459421486",
+        "meaningful": null,
+        "accurate": null,
+        "irrelevant_urls": null,
+        "notes": ""
+      },
+      "expected_found": [
+        "https://example.com/"
+      ],
+      "expected_missing": [],
+      "expected_coverage": 1.0,
+      "duplicate_urls": 0,
+      "out_of_scope_urls": [],
+      "has_substantial_content": true
+    },
+    {
+      "name": "python-docs",
+      "type": "Versioned documentation",
+      "url": "https://docs.python.org/3/",
+      "command": [
+        "/Users/jessicaye/Documents/Projects/llms-txt-jessica-ye/backend/.venv/bin/python",
+        "-m",
+        "app.cli",
+        "generate",
+        "https://docs.python.org/3/",
+        "--max-pages",
+        "20",
+        "--max-depth",
+        "3",
+        "--crawl-scope",
+        "directory",
+        "--output",
+        "output/benchmarks/20261016T150921.424598Z/python-docs-llms.txt",
+        "--verbose"
+      ],
+      "exit_code": 0,
+      "seconds": 21.61,
+      "stats": {
+        "website": "https://docs.python.org/3/",
+        "status": "complete",
+        "discovered": 523,
+        "crawled": 20,
+        "selected": 20,
+        "attempted": 20,
+        "requests": 22,
+        "blocked": 0,
+        "seconds": 21.35,
+        "errors": [],
+        "crawl_scope": "directory",
+        "duplicates_removed": 0,
+        "selected_pages": [
+          {
+            "url": "https://docs.python.org/3/",
+            "title": "3.15.0 Documentation",
+            "content_characters": 1393,
+            "description_characters": 34
+          },
+          {
+            "url": "https://docs.python.org/3/tutorial/index.html",
+            "title": "The Python Tutorial — Python 3.15.0 documentation",
+            "content_characters": 2299,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/extending/index.html",
+            "title": "Extending and Embedding the Python Interpreter — Python 3.15.0 documentation",
+            "content_characters": 3321,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/installing/index.html",
+            "title": "Installing Python modules — Python 3.15.0 documentation",
+            "content_characters": 5799,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/whatsnew/3.15.html",
+            "title": "What’s new in Python 3.15 — Python 3.15.0 documentation",
+            "content_characters": 100364,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/library/index.html",
+            "title": "The Python standard library — Python 3.15.0 documentation",
+            "content_characters": 1605,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/reference/grammar.html",
+            "title": "10. Full Grammar specification — Python 3.15.0 documentation",
+            "content_characters": 20644,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/builtins/index.html",
+            "title": "Python built-ins reference — Python 3.15.0 documentation",
+            "content_characters": 780,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/deprecations/index.html",
+            "title": "Deprecations — Python 3.15.0 documentation",
+            "content_characters": 23305,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/howto/index.html",
+            "title": "Python HOWTOs — Python 3.15.0 documentation",
+            "content_characters": 989,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/using/index.html",
+            "title": "Python Setup and Usage — Python 3.15.0 documentation",
+            "content_characters": 234,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/c-api/index.html",
+            "title": "Python/C API reference manual — Python 3.15.0 documentation",
+            "content_characters": 323,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/faq/index.html",
+            "title": "Python Frequently Asked Questions — Python 3.15.0 documentation",
+            "content_characters": 238,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/py-modindex.html",
+            "title": "Python Module Index — Python 3.15.0 documentation",
+            "content_characters": 3486,
+            "description_characters": 214
+          },
+          {
+            "url": "https://docs.python.org/3/tutorial/appendix.html",
+            "title": "16. Appendix — Python 3.15.0 documentation",
+            "content_characters": 4930,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/whatsnew/index.html",
+            "title": "What’s New in Python — Python 3.15.0 documentation",
+            "content_characters": 404,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/library/security_warnings.html",
+            "title": "Security Considerations — Python 3.15.0 documentation",
+            "content_characters": 1228,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/reference/index.html",
+            "title": "The Python Language Reference — Python 3.15.0 documentation",
+            "content_characters": 683,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/3/genindex.html",
+            "title": "Index — Python 3.15.0 documentation",
+            "content_characters": 175,
+            "description_characters": 115
+          },
+          {
+            "url": "https://docs.python.org/3/download.html",
+            "title": "Download — Python 3.15.0 documentation",
+            "content_characters": 501,
+            "description_characters": 30
+          }
+        ]
+      },
+      "outcome": "candidate",
+      "signals": [],
+      "automated_checks_passed": true,
+      "quality_pass": false,
+      "manual_review_status": "pending",
+      "output_sha256": "234334e26241b46fece34835b87754f8eda73f20dbc513447e73ca3681c03ff4",
+      "manual_review": {
+        "output_sha256": "234334e26241b46fece34835b87754f8eda73f20dbc513447e73ca3681c03ff4",
+        "meaningful": null,
+        "accurate": null,
+        "irrelevant_urls": null,
+        "notes": ""
+      },
+      "expected_found": [
+        "https://docs.python.org/3/tutorial/index.html",
+        "https://docs.python.org/3/library/index.html",
+        "https://docs.python.org/3/reference/index.html"
+      ],
+      "expected_missing": [],
+      "expected_coverage": 1.0,
+      "duplicate_urls": 0,
+      "out_of_scope_urls": [],
+      "has_substantial_content": true
+    },
+    {
+      "name": "python-french",
+      "type": "Multilingual documentation",
+      "url": "https://docs.python.org/fr/3/",
+      "command": [
+        "/Users/jessicaye/Documents/Projects/llms-txt-jessica-ye/backend/.venv/bin/python",
+        "-m",
+        "app.cli",
+        "generate",
+        "https://docs.python.org/fr/3/",
+        "--max-pages",
+        "20",
+        "--max-depth",
+        "3",
+        "--crawl-scope",
+        "directory",
+        "--output",
+        "output/benchmarks/20261016T150921.424598Z/python-french-llms.txt",
+        "--verbose"
+      ],
+      "exit_code": 0,
+      "seconds": 21.62,
+      "stats": {
+        "website": "https://docs.python.org/fr/3/",
+        "status": "complete",
+        "discovered": 522,
+        "crawled": 20,
+        "selected": 20,
+        "attempted": 20,
+        "requests": 22,
+        "blocked": 0,
+        "seconds": 21.32,
+        "errors": [],
+        "crawl_scope": "directory",
+        "duplicates_removed": 0,
+        "selected_pages": [
+          {
+            "url": "https://docs.python.org/fr/3/",
+            "title": "3.15.0 Documentation",
+            "content_characters": 1501,
+            "description_characters": 34
+          },
+          {
+            "url": "https://docs.python.org/fr/3/py-modindex.html",
+            "title": "Index des modules Python — Documentation Python 3.15.0",
+            "content_characters": 3486,
+            "description_characters": 214
+          },
+          {
+            "url": "https://docs.python.org/fr/3/genindex.html",
+            "title": "Index — Documentation Python 3.15.0",
+            "content_characters": 198,
+            "description_characters": 116
+          },
+          {
+            "url": "https://docs.python.org/fr/3/tutorial/index.html",
+            "title": "Le tutoriel Python — Documentation Python 3.15.0",
+            "content_characters": 2488,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/fr/3/tutorial/appendix.html",
+            "title": "16. Annexe — Documentation Python 3.15.0",
+            "content_characters": 5082,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/fr/3/extending/index.html",
+            "title": "Extension et intégration de l'interpréteur Python — Documentation Python 3.15.0",
+            "content_characters": 3344,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/fr/3/installing/index.html",
+            "title": "Installing Python modules — Documentation Python 3.15.0",
+            "content_characters": 6109,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/fr/3/whatsnew/3.15.html",
+            "title": "What's new in Python 3.15 — Documentation Python 3.15.0",
+            "content_characters": 100390,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/fr/3/library/index.html",
+            "title": "The Python standard library — Documentation Python 3.15.0",
+            "content_characters": 1610,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/fr/3/reference/grammar.html",
+            "title": "10. Spécification complète de la grammaire — Documentation Python 3.15.0",
+            "content_characters": 20727,
+            "description_characters": 195
+          },
+          {
+            "url": "https://docs.python.org/fr/3/builtins/index.html",
+            "title": "Python built-ins reference — Documentation Python 3.15.0",
+            "content_characters": 784,
+            "description_characters": 190
+          },
+          {
+            "url": "https://docs.python.org/fr/3/reference/index.html",
+            "title": "La référence du langage Python — Documentation Python 3.15.0",
+            "content_characters": 686,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/fr/3/deprecations/index.html",
+            "title": "Obsolescence — Documentation Python 3.15.0",
+            "content_characters": 23305,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/fr/3/howto/index.html",
+            "title": "Les guides pratiques (Howto) de Python — Documentation Python 3.15.0",
+            "content_characters": 1235,
+            "description_characters": 200
+          },
+          {
+            "url": "https://docs.python.org/fr/3/library/security_warnings.html",
+            "title": "Considérations de sécurité — Documentation Python 3.15.0",
+            "content_characters": 1231,
+            "description_characters": 190
+          },
+          {
+            "url": "https://docs.python.org/fr/3/whatsnew/index.html",
+            "title": "Nouveautés de Python — Documentation Python 3.15.0",
+            "content_characters": 407,
+            "description_characters": 185
+          },
+          {
+            "url": "https://docs.python.org/fr/3/using/index.html",
+            "title": "Installation et utilisation de Python — Documentation Python 3.15.0",
+            "content_characters": 278,
+            "description_characters": 180
+          },
+          {
+            "url": "https://docs.python.org/fr/3/download.html",
+            "title": "Téléchargement — Documentation Python 3.15.0",
+            "content_characters": 584,
+            "description_characters": 30
+          },
+          {
+            "url": "https://docs.python.org/fr/3/c-api/index.html",
+            "title": "Python/C API reference manual — Documentation Python 3.15.0",
+            "content_characters": 354,
+            "description_characters": 180
+          },
+          {
+            "url": "https://docs.python.org/fr/3/faq/index.html",
+            "title": "Questions fréquemment posées sur Python — Documentation Python 3.15.0",
+            "content_characters": 294,
+            "description_characters": 195
+          }
+        ]
+      },
+      "outcome": "candidate",
+      "signals": [],
+      "automated_checks_passed": true,
+      "quality_pass": false,
+      "manual_review_status": "pending",
+      "output_sha256": "cd1dd2547c10d8edb57c3df8695aa43744cfd759db8be1dc9e23f057502f9abf",
+      "manual_review": {
+        "output_sha256": "cd1dd2547c10d8edb57c3df8695aa43744cfd759db8be1dc9e23f057502f9abf",
+        "meaningful": null,
+        "accurate": null,
+        "irrelevant_urls": null,
+        "notes": ""
+      },
+      "expected_found": [
+        "https://docs.python.org/fr/3/tutorial/index.html",
+        "https://docs.python.org/fr/3/library/index.html"
+      ],
+      "expected_missing": [],
+      "expected_coverage": 1.0,
+      "duplicate_urls": 0,
+      "out_of_scope_urls": [],
+      "has_substantial_content": true
+    },
+    {
+      "name": "django",
+      "type": "Software project",
+      "url": "https://www.djangoproject.com/",
+      "command": [
+        "/Users/jessicaye/Documents/Projects/llms-txt-jessica-ye/backend/.venv/bin/python",
+        "-m",
+        "app.cli",
+        "generate",
+        "https://www.djangoproject.com/",
+        "--max-pages",
+        "20",
+        "--max-depth",
+        "3",
+        "--crawl-scope",
+        "directory",
+        "--output",
+        "output/benchmarks/20261016T150921.424598Z/django-llms.txt",
+        "--verbose"
+      ],
+      "exit_code": 0,
+      "seconds": 21.62,
+      "stats": {
+        "website": "https://www.djangoproject.com/",
+        "status": "complete",
+        "discovered": 1056,
+        "crawled": 19,
+        "selected": 19,
+        "attempted": 20,
+        "requests": 22,
+        "blocked": 0,
+        "seconds": 21.31,
+        "errors": [],
+        "crawl_scope": "directory",
+        "duplicates_removed": 0,
+        "selected_pages": [
+          {
+            "url": "https://www.djangoproject.com/",
+            "title": "The web framework for perfectionists with deadlines | Django",
+            "content_characters": 700,
+            "description_characters": 80
+          },
+          {
+            "url": "https://www.djangoproject.com/start/overview/",
+            "title": "Django overview | Django",
+            "content_characters": 1421,
+            "description_characters": 132
+          },
+          {
+            "url": "https://www.djangoproject.com/foundation/teams/",
+            "title": "Django Software Foundation | Django",
+            "content_characters": 6797,
+            "description_characters": 218
+          },
+          {
+            "url": "https://www.djangoproject.com/sponsor/plans/",
+            "title": "How Investing in Django Makes a Difference | Django",
+            "content_characters": 7883,
+            "description_characters": 48
+          },
+          {
+            "url": "https://www.djangoproject.com/conduct/reporting/",
+            "title": "Django Code of Conduct - Reporting Guide | Django",
+            "content_characters": 10356,
+            "description_characters": 216
+          },
+          {
+            "url": "https://www.djangoproject.com/weblog/2026/oct/01/nominate-someone-for-the-2026-malcolm-prize/",
+            "title": "Nominate Someone for the 2026 Malcolm Tredinnick Memorial Prize | Weblog | Django",
+            "content_characters": 1585,
+            "description_characters": 63
+          },
+          {
+            "url": "https://www.djangoproject.com/contact/foundation/",
+            "title": "Contact the Django Software Foundation | Django",
+            "content_characters": 408,
+            "description_characters": 110
+          },
+          {
+            "url": "https://www.djangoproject.com/community/badges/",
+            "title": "Django Community | Django",
+            "content_characters": 1713,
+            "description_characters": 68
+          },
+          {
+            "url": "https://www.djangoproject.com/diversity/changes/",
+            "title": "Django Community Diversity Statement - Changes | Django",
+            "content_characters": 846,
+            "description_characters": 213
+          },
+          {
+            "url": "https://www.djangoproject.com/community/",
+            "title": "Django Community | Django",
+            "content_characters": 3303,
+            "description_characters": 68
+          },
+          {
+            "url": "https://www.djangoproject.com/fundraising/",
+            "title": "Support Django | Django",
+            "content_characters": 4302,
+            "description_characters": 74
+          },
+          {
+            "url": "https://www.djangoproject.com/download/",
+            "title": "Download Django | Django",
+            "content_characters": 2695,
+            "description_characters": 199
+          },
+          {
+            "url": "https://www.djangoproject.com/weblog/",
+            "title": "News & Events | Django",
+            "content_characters": 2146,
+            "description_characters": 220
+          },
+          {
+            "url": "https://www.djangoproject.com/foundation/",
+            "title": "About the Django Software Foundation | Django",
+            "content_characters": 2135,
+            "description_characters": 217
+          },
+          {
+            "url": "https://www.djangoproject.com/sponsor/",
+            "title": "Sponsor Django | Django",
+            "content_characters": 1239,
+            "description_characters": 120
+          },
+          {
+            "url": "https://www.djangoproject.com/conduct/",
+            "title": "Django Code of Conduct | Django",
+            "content_characters": 11133,
+            "description_characters": 71
+          },
+          {
+            "url": "https://www.djangoproject.com/diversity/",
+            "title": "Django Community Diversity Statement | Django",
+            "content_characters": 3507,
+            "description_characters": 163
+          },
+          {
+            "url": "https://www.djangoproject.com/start/",
+            "title": "Getting started with Django | Django",
+            "content_characters": 6521,
+            "description_characters": 53
+          },
+          {
+            "url": "https://www.djangoproject.com/trademarks/",
+            "title": "Django Trademark License Agreement | Django",
+            "content_characters": 6947,
+            "description_characters": 219
+          }
+        ]
+      },
+      "outcome": "candidate",
+      "signals": [],
+      "automated_checks_passed": true,
+      "quality_pass": false,
+      "manual_review_status": "pending",
+      "output_sha256": "b4e295857f0046dffa618a0283ce4b0d889ce147e8b74d8e5198e2e09a081d16",
+      "manual_review": {
+        "output_sha256": "b4e295857f0046dffa618a0283ce4b0d889ce147e8b74d8e5198e2e09a081d16",
+        "meaningful": null,
+        "accurate": null,
+        "irrelevant_urls": null,
+        "notes": ""
+      },
+      "expected_found": [
+        "https://www.djangoproject.com/start/",
+        "https://www.djangoproject.com/download/"
+      ],
+      "expected_missing": [],
+      "expected_coverage": 1.0,
+      "duplicate_urls": 0,
+      "out_of_scope_urls": [],
+      "has_substantial_content": true
+    },
+    {
+      "name": "paul-graham",
+      "type": "Legacy personal site",
+      "url": "https://www.paulgraham.com/",
+      "command": [
+        "/Users/jessicaye/Documents/Projects/llms-txt-jessica-ye/backend/.venv/bin/python",
+        "-m",
+        "app.cli",
+        "generate",
+        "https://www.paulgraham.com/",
+        "--max-pages",
+        "20",
+        "--max-depth",
+        "3",
+        "--crawl-scope",
+        "directory",
+        "--output",
+        "output/benchmarks/20261016T150921.424598Z/paul-graham-llms.txt",
+        "--verbose"
+      ],
+      "exit_code": 0,
+      "seconds": 21.71,
+      "stats": {
+        "website": "https://www.paulgraham.com/",
+        "status": "complete",
+        "discovered": 299,
+        "crawled": 19,
+        "selected": 19,
+        "attempted": 20,
+        "requests": 22,
+        "blocked": 0,
+        "seconds": 21.42,
+        "errors": [],
+        "crawl_scope": "directory",
+        "duplicates_removed": 1,
+        "selected_pages": [
+          {
+            "url": "https://www.paulgraham.com/articles.html",
+            "title": "Essays",
+            "content_characters": 5520,
+            "description_characters": 218
+          },
+          {
+            "url": "https://www.paulgraham.com/quo.html",
+            "title": "Quotes",
+            "content_characters": 28718,
+            "description_characters": 214
+          },
+          {
+            "url": "https://www.paulgraham.com/raq.html",
+            "title": "RAQs",
+            "content_characters": 5530,
+            "description_characters": 217
+          },
+          {
+            "url": "https://www.paulgraham.com/bio.html",
+            "title": "Bio",
+            "content_characters": 1014,
+            "description_characters": 216
+          },
+          {
+            "url": "https://www.paulgraham.com/bel.html",
+            "title": "Bel",
+            "content_characters": 615,
+            "description_characters": 218
+          },
+          {
+            "url": "https://www.paulgraham.com/arc.html",
+            "title": "Arc",
+            "content_characters": 528,
+            "description_characters": 219
+          },
+          {
+            "url": "https://www.paulgraham.com/antispam.html",
+            "title": "Spam",
+            "content_characters": 300,
+            "description_characters": 218
+          },
+          {
+            "url": "https://www.paulgraham.com/kedrosky.html",
+            "title": "Responses",
+            "content_characters": 232,
+            "description_characters": 215
+          },
+          {
+            "url": "https://www.paulgraham.com/lisp.html",
+            "title": "Lisp",
+            "content_characters": 128,
+            "description_characters": 128
+          },
+          {
+            "url": "https://www.paulgraham.com/faq.html",
+            "title": "FAQs",
+            "content_characters": 93,
+            "description_characters": 93
+          },
+          {
+            "url": "https://www.paulgraham.com/rss.html",
+            "title": "RSS",
+            "content_characters": 55,
+            "description_characters": 55
+          },
+          {
+            "url": "https://www.paulgraham.com/books.html",
+            "title": "Books",
+            "content_characters": 43,
+            "description_characters": 43
+          },
+          {
+            "url": "https://www.paulgraham.com/",
+            "title": "Paul Graham",
+            "content_characters": 110,
+            "description_characters": 110
+          },
+          {
+            "url": "https://www.paulgraham.com/powerful.html",
+            "title": "Making Startups Powerful",
+            "content_characters": 16702,
+            "description_characters": 219
+          },
+          {
+            "url": "https://www.paulgraham.com/prepare.html",
+            "title": "How Universities Should Prepare Founders",
+            "content_characters": 17007,
+            "description_characters": 219
+          },
+          {
+            "url": "https://www.paulgraham.com/ind.html",
+            "title": "Paul Graham Index",
+            "content_characters": 578,
+            "description_characters": 218
+          },
+          {
+            "url": "https://www.paulgraham.com/info.html",
+            "title": "Paul Graham Info",
+            "content_characters": 517,
+            "description_characters": 217
+          },
+          {
+            "url": "https://www.paulgraham.com/fundraising.html",
+            "title": "A Fundraising Survival Guide",
+            "content_characters": 17198,
+            "description_characters": 215
+          },
+          {
+            "url": "https://www.paulgraham.com/mit.html",
+            "title": "A Student's Guide to Startups",
+            "content_characters": 21290,
+            "description_characters": 217
+          }
+        ]
+      },
+      "outcome": "candidate",
+      "signals": [],
+      "automated_checks_passed": true,
+      "quality_pass": false,
+      "manual_review_status": "pending",
+      "output_sha256": "fc527ecd6059774e7073f4e2bcca10298712e56999c821985162dfb2c2d58168",
+      "manual_review": {
+        "output_sha256": "fc527ecd6059774e7073f4e2bcca10298712e56999c821985162dfb2c2d58168",
+        "meaningful": null,
+        "accurate": null,
+        "irrelevant_urls": null,
+        "notes": ""
+      },
+      "expected_found": [
+        "https://www.paulgraham.com/articles.html"
+      ],
+      "expected_missing": [],
+      "expected_coverage": 1.0,
+      "duplicate_urls": 0,
+      "out_of_scope_urls": [],
+      "has_substantial_content": true
+    },
+    {
+      "name": "wordpress",
+      "type": "CMS and product site",
+      "url": "https://wordpress.org/",
+      "command": [
+        "/Users/jessicaye/Documents/Projects/llms-txt-jessica-ye/backend/.venv/bin/python",
+        "-m",
+        "app.cli",
+        "generate",
+        "https://wordpress.org/",
+        "--max-pages",
+        "20",
+        "--max-depth",
+        "3",
+        "--crawl-scope",
+        "directory",
+        "--output",
+        "output/benchmarks/20261016T150921.424598Z/wordpress-llms.txt",
+        "--verbose"
+      ],
+      "exit_code": 0,
+      "seconds": 32.77,
+      "stats": {
+        "website": "https://wordpress.org/",
+        "status": "complete",
+        "discovered": 564,
+        "crawled": 20,
+        "selected": 20,
+        "attempted": 20,
+        "requests": 33,
+        "blocked": 0,
+        "seconds": 32.49,
+        "errors": [],
+        "crawl_scope": "directory",
+        "duplicates_removed": 0,
+        "selected_pages": [
+          {
+            "url": "https://wordpress.org/",
+            "title": "Blog Tool, Publishing Platform, and CMS – WordPress.org",
+            "content_characters": 2036,
+            "description_characters": 90
+          },
+          {
+            "url": "https://wordpress.org/about/privacy/",
+            "title": "Privacy – WordPress.org",
+            "content_characters": 13019,
+            "description_characters": 218
+          },
+          {
+            "url": "https://wordpress.org/support/forums/",
+            "title": "Forums | WordPress.org",
+            "content_characters": 1065,
+            "description_characters": 48
+          },
+          {
+            "url": "https://wordpress.org/news/category/releases/",
+            "title": "Releases – WordPress News",
+            "content_characters": 29436,
+            "description_characters": 48
+          },
+          {
+            "url": "https://wordpress.org/about/",
+            "title": "About – WordPress.org",
+            "content_characters": 2227,
+            "description_characters": 218
+          },
+          {
+            "url": "https://wordpress.org/about/features/",
+            "title": "Features – WordPress.org",
+            "content_characters": 7496,
+            "description_characters": 216
+          },
+          {
+            "url": "https://wordpress.org/hosting/",
+            "title": "Hosting | WordPress.org",
+            "content_characters": 3635,
+            "description_characters": 217
+          },
+          {
+            "url": "https://wordpress.org/plugins/",
+            "title": "WordPress Plugins | WordPress.org",
+            "content_characters": 3382,
+            "description_characters": 94
+          },
+          {
+            "url": "https://wordpress.org/five-for-the-future/",
+            "title": "Five for the Future | How five percent is powering the next generation of the web | WordPress.org",
+            "content_characters": 3038,
+            "description_characters": 51
+          },
+          {
+            "url": "https://wordpress.org/education/",
+            "title": "Education – WordPress.org",
+            "content_characters": 2415,
+            "description_characters": 219
+          },
+          {
+            "url": "https://wordpress.org/patterns/",
+            "title": "Block Pattern Directory – WordPress.org",
+            "content_characters": 2130,
+            "description_characters": 94
+          },
+          {
+            "url": "https://wordpress.org/blocks/",
+            "title": "Blocks – WordPress.org",
+            "content_characters": 2026,
+            "description_characters": 217
+          },
+          {
+            "url": "https://wordpress.org/enterprise/",
+            "title": "Enterprise – WordPress.org",
+            "content_characters": 1583,
+            "description_characters": 219
+          },
+          {
+            "url": "https://wordpress.org/documentation/",
+            "title": "Documentation – WordPress.org",
+            "content_characters": 1364,
+            "description_characters": 75
+          },
+          {
+            "url": "https://wordpress.org/download/",
+            "title": "Download – WordPress.org",
+            "content_characters": 971,
+            "description_characters": 147
+          },
+          {
+            "url": "https://wordpress.org/showcase/",
+            "title": "The best websites, built with WordPress. | WordPress.org",
+            "content_characters": 659,
+            "description_characters": 85
+          },
+          {
+            "url": "https://wordpress.org/themes/",
+            "title": "WordPress Theme Directory | WordPress.org",
+            "content_characters": 536,
+            "description_characters": 151
+          },
+          {
+            "url": "https://wordpress.org/news/",
+            "title": "WordPress News – The latest news about WordPress and the WordPress community",
+            "content_characters": 294,
+            "description_characters": 59
+          },
+          {
+            "url": "https://wordpress.org/photos/",
+            "title": "WordPress Photo Directory | WordPress.org",
+            "content_characters": 130,
+            "description_characters": 110
+          },
+          {
+            "url": "https://wordpress.org/gutenberg/",
+            "title": "The new Gutenberg editing experience – WordPress.org",
+            "content_characters": 52,
+            "description_characters": 108
+          }
+        ]
+      },
+      "outcome": "candidate",
+      "signals": [],
+      "automated_checks_passed": true,
+      "quality_pass": false,
+      "manual_review_status": "pending",
+      "output_sha256": "62efa23cb488d761efcfa45b741086a4a0aac96bb7e0c3917705e3c9c5b61a6b",
+      "manual_review": {
+        "output_sha256": "62efa23cb488d761efcfa45b741086a4a0aac96bb7e0c3917705e3c9c5b61a6b",
+        "meaningful": null,
+        "accurate": null,
+        "irrelevant_urls": null,
+        "notes": ""
+      },
+      "expected_found": [
+        "https://wordpress.org/about/",
+        "https://wordpress.org/download/"
+      ],
+      "expected_missing": [],
+      "expected_coverage": 1.0,
+      "duplicate_urls": 0,
+      "out_of_scope_urls": [],
+      "has_substantial_content": true
+    },
+    {
+      "name": "books",
+      "type": "Ecommerce sandbox",
+      "url": "https://books.toscrape.com/",
+      "command": [
+        "/Users/jessicaye/Documents/Projects/llms-txt-jessica-ye/backend/.venv/bin/python",
+        "-m",
+        "app.cli",
+        "generate",
+        "https://books.toscrape.com/",
+        "--max-pages",
+        "20",
+        "--max-depth",
+        "3",
+        "--crawl-scope",
+        "directory",
+        "--output",
+        "output/benchmarks/20261016T150921.424598Z/books-llms.txt",
+        "--verbose"
+      ],
+      "exit_code": 0,
+      "seconds": 21.95,
+      "stats": {
+        "website": "https://books.toscrape.com/",
+        "status": "complete",
+        "discovered": 213,
+        "crawled": 19,
+        "selected": 19,
+        "attempted": 20,
+        "requests": 22,
+        "blocked": 0,
+        "seconds": 21.59,
+        "errors": [],
+        "crawl_scope": "directory",
+        "duplicates_removed": 1,
+        "selected_pages": [
+          {
+            "url": "https://books.toscrape.com/",
+            "title": "All products | Books to Scrape - Sandbox",
+            "content_characters": 319,
+            "description_characters": 218
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/the-coming-woman-a-novel-based-on-the-life-of-the-infamous-feminist-victoria-woodhull_993/index.html",
+            "title": "The Coming Woman: A Novel Based on the Life of the Infamous Feminist, Victoria Woodhull | Books to Scrape - Sandbox",
+            "content_characters": 3825,
+            "description_characters": 216
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/sapiens-a-brief-history-of-humankind_996/index.html",
+            "title": "Sapiens: A Brief History of Humankind | Books to Scrape - Sandbox",
+            "content_characters": 2218,
+            "description_characters": 211
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/sharp-objects_997/index.html",
+            "title": "Sharp Objects | Books to Scrape - Sandbox",
+            "content_characters": 1852,
+            "description_characters": 218
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/category/books_1/index.html",
+            "title": "Books | Books to Scrape - Sandbox",
+            "content_characters": 319,
+            "description_characters": 218
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/the-dirty-little-secrets-of-getting-your-dream-job_994/index.html",
+            "title": "The Dirty Little Secrets of Getting Your Dream Job | Books to Scrape - Sandbox",
+            "content_characters": 2224,
+            "description_characters": 219
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/tipping-the-velvet_999/index.html",
+            "title": "Tipping the Velvet | Books to Scrape - Sandbox",
+            "content_characters": 1185,
+            "description_characters": 216
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/soumission_998/index.html",
+            "title": "Soumission | Books to Scrape - Sandbox",
+            "content_characters": 1278,
+            "description_characters": 217
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html",
+            "title": "A Light in the Attic | Books to Scrape - Sandbox",
+            "content_characters": 1089,
+            "description_characters": 218
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/the-boys-in-the-boat-nine-americans-and-their-epic-quest-for-gold-at-the-1936-berlin-olympics_992/index.html",
+            "title": "The Boys in the Boat: Nine Americans and Their Epic Quest for Gold at the 1936 Berlin Olympics | Books to Scrape - Sandbox",
+            "content_characters": 2467,
+            "description_characters": 219
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/category/books/historical-fiction_4/index.html",
+            "title": "Historical Fiction | Books to Scrape - Sandbox",
+            "content_characters": 319,
+            "description_characters": 218
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/category/books/mystery_3/index.html",
+            "title": "Mystery | Books to Scrape - Sandbox",
+            "content_characters": 319,
+            "description_characters": 218
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/the-requiem-red_995/index.html",
+            "title": "The Requiem Red | Books to Scrape - Sandbox",
+            "content_characters": 1293,
+            "description_characters": 213
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/category/books/romance_8/index.html",
+            "title": "Romance | Books to Scrape - Sandbox",
+            "content_characters": 319,
+            "description_characters": 218
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/category/books/sequential-art_5/index.html",
+            "title": "Sequential Art | Books to Scrape - Sandbox",
+            "content_characters": 319,
+            "description_characters": 218
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/category/books/classics_6/index.html",
+            "title": "Classics | Books to Scrape - Sandbox",
+            "content_characters": 303,
+            "description_characters": 218
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/category/books/womens-fiction_9/index.html",
+            "title": "Womens Fiction | Books to Scrape - Sandbox",
+            "content_characters": 271,
+            "description_characters": 218
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/category/books/philosophy_7/index.html",
+            "title": "Philosophy | Books to Scrape - Sandbox",
+            "content_characters": 175,
+            "description_characters": 175
+          },
+          {
+            "url": "https://books.toscrape.com/catalogue/category/books/travel_2/index.html",
+            "title": "Travel | Books to Scrape - Sandbox",
+            "content_characters": 175,
+            "description_characters": 175
+          }
+        ]
+      },
+      "outcome": "candidate",
+      "signals": [],
+      "automated_checks_passed": true,
+      "quality_pass": false,
+      "manual_review_status": "pending",
+      "output_sha256": "95daa7f8b29f818b2909400d303d7933845d15f66cdfccb61a9b11479f7b18a2",
+      "manual_review": {
+        "output_sha256": "95daa7f8b29f818b2909400d303d7933845d15f66cdfccb61a9b11479f7b18a2",
+        "meaningful": null,
+        "accurate": null,
+        "irrelevant_urls": null,
+        "notes": ""
+      },
+      "expected_found": [
+        "https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html"
+      ],
+      "expected_missing": [],
+      "expected_coverage": 1.0,
+      "duplicate_urls": 0,
+      "out_of_scope_urls": [],
+      "has_substantial_content": true
+    },
+    {
+      "name": "quotes",
+      "type": "Directory sandbox",
+      "url": "https://quotes.toscrape.com/",
+      "command": [
+        "/Users/jessicaye/Documents/Projects/llms-txt-jessica-ye/backend/.venv/bin/python",
+        "-m",
+        "app.cli",
+        "generate",
+        "https://quotes.toscrape.com/",
+        "--max-pages",
+        "20",
+        "--max-depth",
+        "3",
+        "--crawl-scope",
+        "directory",
+        "--output",
+        "output/benchmarks/20261016T150921.424598Z/quotes-llms.txt",
+        "--verbose"
+      ],
+      "exit_code": 0,
+      "seconds": 30.77,
+      "stats": {
+        "website": "https://quotes.toscrape.com/",
+        "status": "complete",
+        "discovered": 59,
+        "crawled": 20,
+        "selected": 20,
+        "attempted": 20,
+        "requests": 31,
+        "blocked": 0,
+        "seconds": 30.51,
+        "errors": [],
+        "crawl_scope": "directory",
+        "duplicates_removed": 0,
+        "selected_pages": [
+          {
+            "url": "https://quotes.toscrape.com/",
+            "title": "Quotes to Scrape",
+            "content_characters": 424,
+            "description_characters": 210
+          },
+          {
+            "url": "https://quotes.toscrape.com/tag/love/",
+            "title": "Quotes to Scrape",
+            "content_characters": 2987,
+            "description_characters": 211
+          },
+          {
+            "url": "https://quotes.toscrape.com/author/Albert-Einstein/",
+            "title": "Quotes to Scrape",
+            "content_characters": 3896,
+            "description_characters": 207
+          },
+          {
+            "url": "https://quotes.toscrape.com/tag/life/",
+            "title": "Quotes to Scrape",
+            "content_characters": 2011,
+            "description_characters": 211
+          },
+          {
+            "url": "https://quotes.toscrape.com/author/J-K-Rowling/",
+            "title": "Quotes to Scrape",
+            "content_characters": 3882,
+            "description_characters": 79
+          },
+          {
+            "url": "https://quotes.toscrape.com/tag/inspirational/",
+            "title": "Quotes to Scrape",
+            "content_characters": 1535,
+            "description_characters": 218
+          },
+          {
+            "url": "https://quotes.toscrape.com/author/Marilyn-Monroe/",
+            "title": "Quotes to Scrape",
+            "content_characters": 2274,
+            "description_characters": 219
+          },
+          {
+            "url": "https://quotes.toscrape.com/tag/friends/",
+            "title": "Quotes to Scrape",
+            "content_characters": 1321,
+            "description_characters": 219
+          },
+          {
+            "url": "https://quotes.toscrape.com/author/Jane-Austen/",
+            "title": "Quotes to Scrape",
+            "content_characters": 2044,
+            "description_characters": 75
+          },
+          {
+            "url": "https://quotes.toscrape.com/tag/humor/",
+            "title": "Quotes to Scrape",
+            "content_characters": 1046,
+            "description_characters": 218
+          },
+          {
+            "url": "https://quotes.toscrape.com/author/Eleanor-Roosevelt/",
+            "title": "Quotes to Scrape",
+            "content_characters": 1404,
+            "description_characters": 43
+          },
+          {
+            "url": "https://quotes.toscrape.com/tag/books/",
+            "title": "Quotes to Scrape",
+            "content_characters": 841,
+            "description_characters": 215
+          },
+          {
+            "url": "https://quotes.toscrape.com/author/Thomas-A-Edison/",
+            "title": "Quotes to Scrape",
+            "content_characters": 1279,
+            "description_characters": 57
+          },
+          {
+            "url": "https://quotes.toscrape.com/tag/reading/",
+            "title": "Quotes to Scrape",
+            "content_characters": 727,
+            "description_characters": 218
+          },
+          {
+            "url": "https://quotes.toscrape.com/author/Andre-Gide/",
+            "title": "Quotes to Scrape",
+            "content_characters": 1040,
+            "description_characters": 212
+          },
+          {
+            "url": "https://quotes.toscrape.com/tag/friendship/",
+            "title": "Quotes to Scrape",
+            "content_characters": 461,
+            "description_characters": 217
+          },
+          {
+            "url": "https://quotes.toscrape.com/author/Steve-Martin/",
+            "title": "Quotes to Scrape",
+            "content_characters": 844,
+            "description_characters": 55
+          },
+          {
+            "url": "https://quotes.toscrape.com/tag/simile/",
+            "title": "Quotes to Scrape",
+            "content_characters": 443,
+            "description_characters": 213
+          },
+          {
+            "url": "https://quotes.toscrape.com/author/C-S-Lewis/",
+            "title": "Quotes to Scrape",
+            "content_characters": 918,
+            "description_characters": 43
+          },
+          {
+            "url": "https://quotes.toscrape.com/tag/truth/",
+            "title": "Quotes to Scrape",
+            "content_characters": 252,
+            "description_characters": 219
+          }
+        ]
+      },
+      "outcome": "candidate",
+      "signals": [],
+      "automated_checks_passed": true,
+      "quality_pass": false,
+      "manual_review_status": "pending",
+      "output_sha256": "d9bbe94cd8ded28a09fb4277638bfb2b8c101a69bbcc9ef78cfe3ac7413ff7bf",
+      "manual_review": {
+        "output_sha256": "d9bbe94cd8ded28a09fb4277638bfb2b8c101a69bbcc9ef78cfe3ac7413ff7bf",
+        "meaningful": null,
+        "accurate": null,
+        "irrelevant_urls": null,
+        "notes": ""
+      },
+      "expected_found": [
+        "https://quotes.toscrape.com/author/Albert-Einstein/"
+      ],
+      "expected_missing": [],
+      "expected_coverage": 1.0,
+      "duplicate_urls": 0,
+      "out_of_scope_urls": [],
+      "has_substantial_content": true
+    },
+    {
+      "name": "gov-uk",
+      "type": "Government information portal",
+      "url": "https://www.gov.uk/",
+      "command": [
+        "/Users/jessicaye/Documents/Projects/llms-txt-jessica-ye/backend/.venv/bin/python",
+        "-m",
+        "app.cli",
+        "generate",
+        "https://www.gov.uk/",
+        "--max-pages",
+        "20",
+        "--max-depth",
+        "3",
+        "--crawl-scope",
+        "directory",
+        "--output",
+        "output/benchmarks/20261016T150921.424598Z/gov-uk-llms.txt",
+        "--verbose"
+      ],
+      "exit_code": 0,
+      "seconds": 39.96,
+      "stats": {
+        "website": "https://www.gov.uk/",
+        "status": "complete",
+        "discovered": 4506,
+        "crawled": 19,
+        "selected": 19,
+        "attempted": 20,
+        "requests": 34,
+        "blocked": 0,
+        "seconds": 39.65,
+        "errors": [],
+        "crawl_scope": "directory",
+        "duplicates_removed": 0,
+        "selected_pages": [
+          {
+            "url": "https://www.gov.uk/",
+            "title": "Welcome to GOV.UK",
+            "content_characters": 1836,
+            "description_characters": 68
+          },
+          {
+            "url": "https://www.gov.uk/government/organisations",
+            "title": "Departments, agencies and public bodies - GOV.UK",
+            "content_characters": 4873,
+            "description_characters": 56
+          },
+          {
+            "url": "https://www.gov.uk/browse/business",
+            "title": "Business and self-employed - GOV.UK",
+            "content_characters": 2205,
+            "description_characters": 33
+          },
+          {
+            "url": "https://www.gov.uk/help/privacy-notice",
+            "title": "Privacy notice - GOV.UK",
+            "content_characters": 10213,
+            "description_characters": 91
+          },
+          {
+            "url": "https://www.gov.uk/contact/govuk",
+            "title": "Contact GOV.UK - GOV.UK",
+            "content_characters": 443,
+            "description_characters": 56
+          },
+          {
+            "url": "https://www.gov.uk/guidance/download-the-govuk-app",
+            "title": "Download the GOV.UK app - GOV.UK",
+            "content_characters": 1612,
+            "description_characters": 86
+          },
+          {
+            "url": "https://www.gov.uk/society-and-culture/charities-honours",
+            "title": "Charities, volunteering and honours - GOV.UK",
+            "content_characters": 848,
+            "description_characters": 56
+          },
+          {
+            "url": "https://www.gov.uk/browse",
+            "title": "Services and information - GOV.UK",
+            "content_characters": 1286,
+            "description_characters": 56
+          },
+          {
+            "url": "https://www.gov.uk/government/how-government-works",
+            "title": "How government works - GOV.UK",
+            "content_characters": 7089,
+            "description_characters": 56
+          },
+          {
+            "url": "https://www.gov.uk/browse/benefits",
+            "title": "Benefits - GOV.UK",
+            "content_characters": 1355,
+            "description_characters": 63
+          },
+          {
+            "url": "https://www.gov.uk/help/terms-conditions",
+            "title": "Terms and conditions - GOV.UK",
+            "content_characters": 7653,
+            "description_characters": 115
+          },
+          {
+            "url": "https://www.gov.uk/contact/govuk-app",
+            "title": "Contact the GOV.UK app team - GOV.UK",
+            "content_characters": 443,
+            "description_characters": 56
+          },
+          {
+            "url": "https://www.gov.uk/contact",
+            "title": "Find contact details for services - GOV.UK",
+            "content_characters": 1769,
+            "description_characters": 56
+          },
+          {
+            "url": "https://www.gov.uk/government/get-involved",
+            "title": "Get involved - GOV.UK",
+            "content_characters": 1245,
+            "description_characters": 107
+          },
+          {
+            "url": "https://www.gov.uk/browse/births-deaths-marriages",
+            "title": "Births, deaths, marriages and care - GOV.UK",
+            "content_characters": 655,
+            "description_characters": 68
+          },
+          {
+            "url": "https://www.gov.uk/help/cookies",
+            "title": "Cookies on GOV.UK - GOV.UK",
+            "content_characters": 763,
+            "description_characters": 56
+          },
+          {
+            "url": "https://www.gov.uk/sign-in-childcare-account",
+            "title": "Sign in to your childcare account - GOV.UK",
+            "content_characters": 1037,
+            "description_characters": 163
+          },
+          {
+            "url": "https://www.gov.uk/browse/childcare-parenting",
+            "title": "Childcare and parenting - GOV.UK",
+            "content_characters": 652,
+            "description_characters": 88
+          },
+          {
+            "url": "https://www.gov.uk/browse/citizenship",
+            "title": "Citizenship and living in the UK - GOV.UK",
+            "content_characters": 393,
+            "description_characters": 71
+          }
+        ]
+      },
+      "outcome": "candidate",
+      "signals": [],
+      "automated_checks_passed": true,
+      "quality_pass": false,
+      "manual_review_status": "pending",
+      "output_sha256": "4d9afbf0a25a79c022ad6ef8264fa02aa8309b12b208b4dda144c2d73681b2a3",
+      "manual_review": {
+        "output_sha256": "4d9afbf0a25a79c022ad6ef8264fa02aa8309b12b208b4dda144c2d73681b2a3",
+        "meaningful": null,
+        "accurate": null,
+        "irrelevant_urls": null,
+        "notes": ""
+      },
+      "expected_found": [
+        "https://www.gov.uk/browse/benefits"
+      ],
+      "expected_missing": [],
+      "expected_coverage": 1.0,
+      "duplicate_urls": 0,
+      "out_of_scope_urls": [],
+      "has_substantial_content": true
+    },
+    {
+      "name": "nasa",
+      "type": "Institutional news and media",
+      "url": "https://www.nasa.gov/",
+      "command": [
+        "/Users/jessicaye/Documents/Projects/llms-txt-jessica-ye/backend/.venv/bin/python",
+        "-m",
+        "app.cli",
+        "generate",
+        "https://www.nasa.gov/",
+        "--max-pages",
+        "20",
+        "--max-depth",
+        "3",
+        "--crawl-scope",
+        "directory",
+        "--output",
+        "output/benchmarks/20261016T150921.424598Z/nasa-llms.txt",
+        "--verbose"
+      ],
+      "exit_code": 0,
+      "seconds": 34.74,
+      "stats": {
+        "website": "https://www.nasa.gov/",
+        "status": "complete",
+        "discovered": 4478,
+        "crawled": 20,
+        "selected": 20,
+        "attempted": 20,
+        "requests": 35,
+        "blocked": 0,
+        "seconds": 34.43,
+        "errors": [],
+        "crawl_scope": "directory",
+        "duplicates_removed": 0,
+        "selected_pages": [
+          {
+            "url": "https://www.nasa.gov/",
+            "title": "NASA",
+            "content_characters": 1286,
+            "description_characters": 174
+          },
+          {
+            "url": "https://www.nasa.gov/event-type/launch-schedule/",
+            "title": "Launch Schedule Archives - NASA",
+            "content_characters": 6478,
+            "description_characters": 219
+          },
+          {
+            "url": "https://www.nasa.gov/2026-news-releases/",
+            "title": "2026 News Releases - NASA",
+            "content_characters": 6406,
+            "description_characters": 60
+          },
+          {
+            "url": "https://www.nasa.gov/image-of-the-day/",
+            "title": "Image of the Day - NASA",
+            "content_characters": 5086,
+            "description_characters": 215
+          },
+          {
+            "url": "https://www.nasa.gov/interactives/",
+            "title": "Games and Interactives - NASA",
+            "content_characters": 3612,
+            "description_characters": 124
+          },
+          {
+            "url": "https://www.nasa.gov/nasa-brand-center/",
+            "title": "NASA Brand Center",
+            "content_characters": 5497,
+            "description_characters": 138
+          },
+          {
+            "url": "https://www.nasa.gov/newsletters/",
+            "title": "Newsletters - NASA",
+            "content_characters": 4757,
+            "description_characters": 150
+          },
+          {
+            "url": "https://www.nasa.gov/social-media/",
+            "title": "Official NASA Social Media Accounts - NASA",
+            "content_characters": 8239,
+            "description_characters": 18
+          },
+          {
+            "url": "https://www.nasa.gov/nasa-virtual-guest-program/",
+            "title": "NASA Virtual Guest Program - NASA",
+            "content_characters": 1649,
+            "description_characters": 72
+          },
+          {
+            "url": "https://www.nasa.gov/ebooks/",
+            "title": "e-Books - NASA",
+            "content_characters": 1517,
+            "description_characters": 137
+          },
+          {
+            "url": "https://www.nasa.gov/podcasts/",
+            "title": "Podcasts - NASA",
+            "content_characters": 1340,
+            "description_characters": 23
+          },
+          {
+            "url": "https://www.nasa.gov/podcasts-and-audio/",
+            "title": "Podcasts and Audio - NASA",
+            "content_characters": 1252,
+            "description_characters": 156
+          },
+          {
+            "url": "https://www.nasa.gov/multimedia/",
+            "title": "Multimedia - NASA",
+            "content_characters": 1213,
+            "description_characters": 178
+          },
+          {
+            "url": "https://www.nasa.gov/news/",
+            "title": "NASA News",
+            "content_characters": 713,
+            "description_characters": 81
+          },
+          {
+            "url": "https://www.nasa.gov/images/",
+            "title": "NASA Images - NASA",
+            "content_characters": 701,
+            "description_characters": 101
+          },
+          {
+            "url": "https://www.nasa.gov/apps/",
+            "title": "Mobile and Desktop Apps - NASA",
+            "content_characters": 674,
+            "description_characters": 23
+          },
+          {
+            "url": "https://www.nasa.gov/events/",
+            "title": "Events - NASA",
+            "content_characters": 6469,
+            "description_characters": 21
+          },
+          {
+            "url": "https://www.nasa.gov/nasa-blogs/",
+            "title": "Blogs - NASA",
+            "content_characters": 424,
+            "description_characters": 216
+          },
+          {
+            "url": "https://www.nasa.gov/a-to-z-topics-listing/",
+            "title": "A to Z Topics Listing - NASA",
+            "content_characters": 39287,
+            "description_characters": 59
+          },
+          {
+            "url": "https://www.nasa.gov/nasa-missions/",
+            "title": "Missions - NASA",
+            "content_characters": 3822,
+            "description_characters": 65
+          }
+        ]
+      },
+      "outcome": "needs_review",
+      "signals": [],
+      "automated_checks_passed": false,
+      "quality_pass": false,
+      "manual_review_status": "pending",
+      "output_sha256": "5f6dc5bd9610b4aaeba9563260de793a8b95164db4cc97250473be5fe5ca3438",
+      "manual_review": {
+        "output_sha256": "5f6dc5bd9610b4aaeba9563260de793a8b95164db4cc97250473be5fe5ca3438",
+        "meaningful": null,
+        "accurate": null,
+        "irrelevant_urls": null,
+        "notes": ""
+      },
+      "expected_found": [],
+      "expected_missing": [
+        "https://www.nasa.gov/missions/"
+      ],
+      "expected_coverage": 0.0,
+      "duplicate_urls": 0,
+      "out_of_scope_urls": [],
+      "has_substantial_content": true
+    },
+    {
+      "name": "julia-evans",
+      "type": "Technical blog",
+      "url": "https://jvns.ca/",
+      "command": [
+        "/Users/jessicaye/Documents/Projects/llms-txt-jessica-ye/backend/.venv/bin/python",
+        "-m",
+        "app.cli",
+        "generate",
+        "https://jvns.ca/",
+        "--max-pages",
+        "20",
+        "--max-depth",
+        "3",
+        "--crawl-scope",
+        "directory",
+        "--output",
+        "output/benchmarks/20261016T150921.424598Z/julia-evans-llms.txt",
+        "--verbose"
+      ],
+      "exit_code": 0,
+      "seconds": 24.97,
+      "stats": {
+        "website": "https://jvns.ca/",
+        "status": "complete",
+        "discovered": 779,
+        "crawled": 20,
+        "selected": 20,
+        "attempted": 20,
+        "requests": 25,
+        "blocked": 0,
+        "seconds": 24.65,
+        "errors": [],
+        "crawl_scope": "directory",
+        "duplicates_removed": 0,
+        "selected_pages": [
+          {
+            "url": "https://jvns.ca/",
+            "title": "Julia Evans",
+            "content_characters": 24852,
+            "description_characters": 11
+          },
+          {
+            "url": "https://jvns.ca/categories/favorite/",
+            "title": "Favorite",
+            "content_characters": 1498,
+            "description_characters": 8
+          },
+          {
+            "url": "https://jvns.ca/blog/2015/11/21/why-you-should-understand-a-little-about-tcp/",
+            "title": "Why you should understand (a little) about TCP",
+            "content_characters": 5048,
+            "description_characters": 46
+          },
+          {
+            "url": "https://jvns.ca/blog/2017/05/02/like-zines-about-computers--you-might-love-bubblesort-zines/",
+            "title": "Like zines about computers? You might love Bubblesort Zines",
+            "content_characters": 4791,
+            "description_characters": 59
+          },
+          {
+            "url": "https://jvns.ca/blog/2014/08/12/what-happens-if-you-write-a-tcp-stack-in-python/",
+            "title": "What happens if you write a TCP stack in Python?",
+            "content_characters": 5875,
+            "description_characters": 48
+          },
+          {
+            "url": "https://jvns.ca/blog/2016/10/04/exec-will-eat-your-brain/",
+            "title": "What happens when you start a process on Linux?",
+            "content_characters": 5400,
+            "description_characters": 47
+          },
+          {
+            "url": "https://jvns.ca/2012/12/16/all_girl_hack_night/",
+            "title": "Montreal All-Girl Hack Night #1: AMAZING",
+            "content_characters": 1711,
+            "description_characters": 40
+          },
+          {
+            "url": "https://jvns.ca/2013/01/27/all_girl_hack_night_2/",
+            "title": "Montreal All-Girl Hack Night #2: now with cookies",
+            "content_characters": 1104,
+            "description_characters": 49
+          },
+          {
+            "url": "https://jvns.ca/til/a-go-middleware-to-recover-from-panics/",
+            "title": "a Go middleware to recover from panics",
+            "content_characters": 683,
+            "description_characters": 38
+          },
+          {
+            "url": "https://jvns.ca/til/",
+            "title": "Julia Evans: TIL",
+            "content_characters": 22460,
+            "description_characters": 16
+          },
+          {
+            "url": "https://jvns.ca/categories/hackerschool/",
+            "title": "Hackerschool",
+            "content_characters": 2696,
+            "description_characters": 12
+          },
+          {
+            "url": "https://jvns.ca/blog/2015/12/30/do-the-math-on-your-stock-options/",
+            "title": "Things you should know about stock options before negotiating an offer",
+            "content_characters": 13417,
+            "description_characters": 70
+          },
+          {
+            "url": "https://jvns.ca/til/advice-for-writing-alt-text/",
+            "title": "Advice for writing alt text",
+            "content_characters": 504,
+            "description_characters": 27
+          },
+          {
+            "url": "https://jvns.ca/projects/",
+            "title": "Projects",
+            "content_characters": 2237,
+            "description_characters": 8
+          },
+          {
+            "url": "https://jvns.ca/categories/ruby-profiler/",
+            "title": "Ruby-Profiler",
+            "content_characters": 771,
+            "description_characters": 13
+          },
+          {
+            "url": "https://jvns.ca/teach-tech-with-cartoons/",
+            "title": "How to teach technical concepts with cartoons",
+            "content_characters": 11970,
+            "description_characters": 45
+          },
+          {
+            "url": "https://jvns.ca/about/",
+            "title": "About",
+            "content_characters": 1117,
+            "description_characters": 5
+          },
+          {
+            "url": "https://jvns.ca/talks/",
+            "title": "Talks",
+            "content_characters": 2697,
+            "description_characters": 5
+          },
+          {
+            "url": "https://jvns.ca/blogroll/",
+            "title": "Blogs I like",
+            "content_characters": 2693,
+            "description_characters": 12
+          },
+          {
+            "url": "https://jvns.ca/papers-i-like/",
+            "title": "Papers I like",
+            "content_characters": 796,
+            "description_characters": 13
+          }
+        ]
+      },
+      "outcome": "candidate",
+      "signals": [],
+      "automated_checks_passed": true,
+      "quality_pass": false,
+      "manual_review_status": "pending",
+      "output_sha256": "e603bc5ae93e70e6f5653b40aec9f1686d5a915751a1e0096531f9de49757093",
+      "manual_review": {
+        "output_sha256": "e603bc5ae93e70e6f5653b40aec9f1686d5a915751a1e0096531f9de49757093",
+        "meaningful": null,
+        "accurate": null,
+        "irrelevant_urls": null,
+        "notes": ""
+      },
+      "expected_found": [
+        "https://jvns.ca/about/"
+      ],
+      "expected_missing": [],
+      "expected_coverage": 1.0,
+      "duplicate_urls": 0,
+      "out_of_scope_urls": [],
+      "has_substantial_content": true
+    },
+    {
+      "name": "diagrams",
+      "type": "JavaScript application (known limitation)",
+      "url": "https://app.diagrams.net/",
+      "command": [
+        "/Users/jessicaye/Documents/Projects/llms-txt-jessica-ye/backend/.venv/bin/python",
+        "-m",
+        "app.cli",
+        "generate",
+        "https://app.diagrams.net/",
+        "--max-pages",
+        "20",
+        "--max-depth",
+        "3",
+        "--crawl-scope",
+        "directory",
+        "--output",
+        "output/benchmarks/20261016T150921.424598Z/diagrams-llms.txt",
+        "--verbose"
+      ],
+      "exit_code": 0,
+      "seconds": 2.61,
+      "stats": {
+        "website": "https://app.diagrams.net/",
+        "status": "complete",
+        "discovered": 1,
+        "crawled": 1,
+        "selected": 1,
+        "attempted": 1,
+        "requests": 3,
+        "blocked": 0,
+        "seconds": 2.33,
+        "errors": [],
+        "crawl_scope": "directory",
+        "duplicates_removed": 0,
+        "selected_pages": [
+          {
+            "url": "https://app.diagrams.net/",
+            "title": "Flowchart Maker & Online Diagram Software",
+            "content_characters": 329,
+            "description_characters": 121
+          }
+        ]
+      },
+      "outcome": "candidate",
+      "signals": [],
+      "automated_checks_passed": true,
+      "quality_pass": false,
+      "manual_review_status": "pending",
+      "output_sha256": "7c89e394fd6b52e1e13d6d0d374f899cbd65a06315432901ac48aa5c6f85dd0f",
+      "manual_review": {
+        "output_sha256": "7c89e394fd6b52e1e13d6d0d374f899cbd65a06315432901ac48aa5c6f85dd0f",
+        "meaningful": null,
+        "accurate": null,
+        "irrelevant_urls": null,
+        "notes": ""
+      },
+      "expected_found": [
+        "https://app.diagrams.net/"
+      ],
+      "expected_missing": [],
+      "expected_coverage": 1.0,
+      "duplicate_urls": 0,
+      "out_of_scope_urls": [],
+      "has_substantial_content": true
+    }
+  ],
+  "run_settings": {
+    "max_pages": 20,
+    "max_depth": 3,
+    "timeout_per_site_seconds": 90,
+    "request_delay_seconds": 1,
+    "working_tree_changes": true,
+    "expectations": "original manifest, before NASA navigation URL correction"
+  }
+}
